@@ -1,4 +1,4 @@
-function [] = NewSegm(GeneratePlots,debug);
+function [] = NewSegm(GeneratePlots,debugParameters);
 % function [] = NewSegm(GeneratePlots,debug);
 % Calculates M1 segmentation for TMT using the approved technique (scaling parameter = 0.165, clocking but not recentering the BFRH)
 %
@@ -34,7 +34,7 @@ function [] = NewSegm(GeneratePlots,debug);
 % Updated and corrected: Curt Baffes, TMT, January 2008, 626-395-1632, cbaffes@tmt.org
 % Changes:
 %   - corrected calculation of gapped vertex location so that gapped vertices exist in the optical surface
-%   - adjusted dZcell to generate local AAP coordinates as given in segmentation database printout dated 26-NOV-2007 (EP-EW version)
+%   - adjusted dNormalM1OSToCellNode to generate local AAP coordinates as given in segmentation database printout dated 26-NOV-2007 (EP-EW version)
 %
 % Modified and Extended: Eric Ponslet, February & March 2010, elp@ericandlucie.com
 % Changes:
@@ -44,7 +44,7 @@ function [] = NewSegm(GeneratePlots,debug);
 %         rewrote best fit regular hexagon routines to avoid use of lsqcurvefit function (replaced with more explicit LSQ using fminsearch); this results in new m-files fithexnew.m and fitnew.m
 %         modified the circumscribed circle routines circum.m and circumradius.m (different grammar of call to fminsearch in older version)
 %     Made changes to make code consistent with C. Baffes REL07 of the code:
-%         Changed dZcell to make Z of AAP/M1 Cell iinterface point = -388mm = CAD model; dZcell was dZcell=0.36222495, now is dZcell=0.39222699; As a result, Z_PSA was -358mm, now is -388mm
+%         Changed dNormalM1OSToCellNode to make Z of AAP/M1 Cell iinterface point = -388mm = CAD model; dNormalM1OSToCellNode was dNormalM1OSToCellNode=0.36222495, now is dNormalM1OSToCellNode=0.39222699; As a result, Z_PSA was -358mm, now is -388mm
 %         Conic constant was -1.000953; now is -1.00095348 per OAD
 %         Replaced text output of sections 2, 3, and 4 with tab-delimited output
 %     Changed calculation of gapping vectors ggI and gOptI, from 3D geometry to 2D geometry (the correct approach per definition of gapping process)
@@ -54,6 +54,52 @@ function [] = NewSegm(GeneratePlots,debug);
 %         Two new functions: Intersect.m: finds the intersection with the optical surface of a line along a given vector, originating from a given point (">>help Intersect" for more info) 
 %                            Normal.m: calculates a vector in M1CRS that is normal to the optical surface at a point on the optical surface defined by X,Y (M1CRS) (">>help Normal" for more info)
 
+% extended: Eric Ponslet, 2010
+% Additions: 
+%     Now computing and listing off axis segment prescription parameters
+
+% Updated and extended: Eric Ponslet, June-September, 2012, based on e-mails from Eric Williams, dated 3/14/2012 and later
+% Changes:
+%     Several changes/additions/modifications in labeling and titling of the database file (for clarity)
+%     Optical surface fiducials moved from radius 0.589250 to 1.115000m
+%     Added section 10B, which lists the coordinates of optical surface probe points
+%     Added section 10C, which lists the coordinates of subcell alignment targets
+%     Added section 6C, which lists the coordinates of the origins of the edge sensor pocket coordinate systems, expressed in PSACRS
+%     Added section 8, with coordinates of cell top chord centerline nodes
+%
+% Updated: Eric Ponslet, October-November 2012, based on e-mails with Eric Williams
+%     New definition of cell-side AAP points based on top cell truss plates being parallel to Z_PSA
+%     Changed radius to AAP points in PSA (re-optimized to minimize AAP adjustment range)
+%     Optical fiducial angles and radius changed (M1S-001-01000-RevF)
+%     Optical surface probes angles and radius changed
+%
+% Corrected and Updated: Eric Ponslet, Dec 2012, based on e-mails with Eric
+% Williams
+%     Fixed bug in clocking of cell top chord members from sector to sector
+%     Cahnged definition of cell top chord: was using verties 1,3,5 in
+%     sector A (triangles pointing to +X_M1); now using vertices 2,4,6 in
+%     sector A (triangles pointing to +X_M1).
+%
+% Extended: Eric Ponslet, Feb 2013, based on e-mail with E. Williams 02/08/2013
+%     Added computationn and listing of angle, measured about PSACRS_Z (or, in the PSACRS_XY plane), from the intersection between planes PSACRS_XY and M1CRS_RZ to PSACRS_X 
+%
+% Corrected: Eric Ponslet, August 2013, based on e-mail from Alan Tubb 08/01/13
+%     Y_ESCRS offest from ESCRS origin to ESPCRS origin had wrong sign for even numbered edge sensors
+%
+% Extended: Eric Ponslet, Sept 2013, based on e-mails from Eric Williams 09/25-26/2013
+%     Added section 10D "Fixed Frame Alignment Targets" section
+% Modified: Eric Ponslet, Oct 15, 2013, based on e-mail from Eric Williams 10/10/2013
+%     Removed section 10D and instead implemented same functionality in
+%     section 10C with new coordinates
+%
+% Extended: Eric Ponslet, Nov 2014, based on e-mails from E.Williams
+%     Added a new set of OS probe points (old set renamed SET1, new set named SET2)
+%     Added section 10C to list coordinates of new OS Probe point set (SET2) into DB file
+%     Renumbered following sections: 10C to 10D, 10C1 to 10D1, 10C2 to 10D2
+%
+% Extended: Eric Ponslet, Feb 26, 2015, based on e-mail from E. Williams dated 02/02/2015
+%     Added section 11D containing B&W Zernike coefficients in PSA coordinates
+%
 %######################################## set master parameters ########################################
 tstart=cputime;
 dt=cputime-tstart;
@@ -69,15 +115,35 @@ Rout=14.4;            % outer radius used for cropping base pattern in routine C
 Opt_k=60.0;           % paraxial radius of curvature
 Opt_K=-1.00095348;    % conic constant
 
-% locations of assembly tooling fiducials on optical surface of segments, in PSA coordinate system                      
-Fiducial_Radius=0.589250;       % radial location of fiducials, in local PSA axes
-Fiducial_Angles=[90 210 330];   % angular location of fiducials relative to XYZ_PSA, in degrees
+% locations of optical surface fiducials on optical surface of segments, in PSA coordinate system                      
+OSFiducials_Radius=1.3400/2.0; % was 0.589250;       % radial location of fiducials, in local PSA axes (per M1S-001-01000-RevF)
+OSFiducials_Angles=[0 120 240];   % angular location of fiducials relative to XYZ_PSA, in degrees (per M1S-001-01000-RevF)
 % fiducials are located on the optical surface; Z coordinates will be calculated accordingly
 
+% locations of optical surface probe ***set 1*** locations
+OSProbes1_Radius=0.589250;       % radial location of probe locations, in local PSA axes
+OSProbes1_Angles=[90 210 330];   % angular location of probe locations to XYZ_PSA, in degrees
+% probe locations are located on the optical surface; Z coordinates will be calculated accordingly
+
+% locations of optical surface probe ***set 2*** locations
+OSProbes2_Radius=0.6700;       % radial location of probe locations, in local PSA axes
+OSProbes2_Angles=[60 180 300];   % angular location of probe locations to XYZ_PSA, in degrees
+% probe locations are located on the optical surface; Z coordinates will be calculated accordingly
+
+
+% locations of subcell alignment targets
+SubcellAlignmentTargets_Radius=0.6700;       % radial location of alignment targets, in local PSA axes
+SubcellAlignmentTargets_Angles=[0 120 240];   % angular location of alignment targets relative to XYZ_PSA, in degrees
+SubcellAlignmentTargets_Z = 0.00363000*[1 1 1];  % Z location of target centers
+% data above from e-mail from Eric Williams, dated 10/10/2013
+
 % locations of Cell-PSA interface nodes, in PSA coordinate system
-CellInterface_Radius=0.418375;      % radial location of Cell-PSA interface points, in local PSA axes
-CellInterface_Angles=[90 210 330];  % angular location of Cell-PSA interface points relative to XYZ_PSA, in degrees
-CellInterface_Z=-.388000;           % Z location of Cell-PSA interface points, in local PSA axes
+PSASideAAPFace_Radius=0.418276;  %0.418171;      % radial location of AAP mounting faces, in local PSA axes (reoptimized on Nov 13, 2012)
+PSASideAAPFace_Angles=[90 210 330];  % angular location of AAP mounting faces relative to XYZ_PSA, in degrees
+PSASideAAPFace_Z=-.388000;           % Z location of AAP mounting faces, in local PSA axes
+dZTopChordToAAPFace = -0.030;  % distance along normal to M1 surface from cell-side SSA
+dNormalM1OSToCellNode=0.39222+dZTopChordToAAPFace;    % distance between optical surface and cell nodes (ADJUST BY TRIAL AND ERROR S.T. Z_PSA COORDINATE OF AAP CENTERS MATCHES CAD MODEL OF PSA)
+dZAAPFaceToAAPCenter = -0.067375;       % distance along Z_PSA from AAP mounting face to nominal center of AAP ball joint
 
 % locations of origins of actuator coordinate systems, in PSA coordinate system
 ActOrigin_Radius=0.531;           % radial location of Cell-PSA interface points, in local PSA axes
@@ -107,20 +173,25 @@ ES_Vertex=[2 3;...
 % Distance from near (ungapped) vertex to edge sensor
 ES_Dist=0.100722;
 
+% locations of edge sensor pocket coordinate systems ESPCRS, relative to
+% ESCRS (per E. Williams e-mail 5/7/2012 
+% (!!!Y offset must be flipped for even-numbered edge sensors)
+ESPOrigin_ESCRS = [0.0; 0.021325; -0.04000];
 
 % Exagerated M1 paramaters, for debugging purposes
-if debug
+if debugParameters
     disp('WARNING: DEBUGGING MODE - your geometry settings are being overwritten!');
     Opt_k=11;
     a=5/2;
-    Gap=a/10;
+    %Gap=a/10;
+    Gap=0.5*a;
     Rout=10;
     ES_Dist=a/4;
     NominalRadius=a;
     Chamfer=Gap/4;
-    Fiducial_Radius=0.8*a;
-    CellInterface_Radius=0.5*a;
-    CellInterface_Z=-0.5*a;
+    OSFiducial_Radius=0.8*a;
+    PSASideAAPFace_Radius=0.5*a;
+    PSASideAAPFace_Z=-0.5*a;
     ActOrigin_Radius=0.6*a;
 end;
 
@@ -132,11 +203,26 @@ disp(['    Scaling rule parameter, alpha = ' num2str(ScalingParam,8)]);
 disp(['    Segment Gaps = ' num2str(Gap*1000,8) ' mm']);
 disp(['    Chamfer Width (projected into XY_PSA) = ' num2str(Chamfer*1000,8) ' mm']);
 disp(['    Diameter of Nominal Segment = ' num2str(2*NominalRadius,8) ' m']);
-disp(['    Assembly tooling fiducials, relative to PSA coordinate system (on optical surface): Radius = ' num2str(Fiducial_Radius,8) ' m;  ' ...
-                                                                                              'Angles = ' num2str(Fiducial_Angles(1),4) ', ' num2str(Fiducial_Angles(2),4) ', ' num2str(Fiducial_Angles(3),4) ' degrees']); 
-disp(['    Cell-PSA interface nodes, relative to PSA coordinate system: Radius = ' num2str(CellInterface_Radius,8) ' m;  ' ...
-                                                                     'Angles = ' num2str(CellInterface_Angles(1),4) ', ' num2str(CellInterface_Angles(2),4) ', ' num2str(CellInterface_Angles(3),4) ' degrees;  ' ...
-                                                                     'Z = ' num2str(CellInterface_Z,8) ' m']);
+disp(['    Optical Surface Fiducials, relative to PSA coordinate system (on optical surface): Radius = ' num2str(OSFiducials_Radius,8) ' m;  ' ...
+                                                                                              'Angles = ' num2str(OSFiducials_Angles(1),4) ', ' num2str(OSFiducials_Angles(2),4) ', ' num2str(OSFiducials_Angles(3),4) ' degrees']); 
+disp(['    Optical Surface Probe SET1, relative to PSA coordinate system (on optical surface): Radius = ' num2str(OSProbes1_Radius,8) ' m;  ' ...
+                                                                                              'Angles = ' num2str(OSProbes1_Angles(1),4) ', ' num2str(OSProbes1_Angles(2),4) ', ' num2str(OSProbes1_Angles(3),4) ' degrees']); 
+disp(['    Optical Surface Probe SET2, relative to PSA coordinate system (on optical surface): Radius = ' num2str(OSProbes2_Radius,8) ' m;  ' ...
+                                                                                              'Angles = ' num2str(OSProbes2_Angles(1),4) ', ' num2str(OSProbes2_Angles(2),4) ', ' num2str(OSProbes2_Angles(3),4) ' degrees']); 
+disp(['    Subcell alignment targets, relative to PSA coordinate system (on optical surface): Radius = ' num2str(SubcellAlignmentTargets_Radius,8) ' m;  ' ...
+                                                                                              'Angles = ' num2str(SubcellAlignmentTargets_Angles(1),4) ', ' num2str(SubcellAlignmentTargets_Angles(2),4) ', ' num2str(SubcellAlignmentTargets_Angles(3),4) ' degrees;  '...
+                                                                                              'Z =' num2str(SubcellAlignmentTargets_Z(1),4) ', ' num2str(SubcellAlignmentTargets_Z(2),4) ', ' num2str(SubcellAlignmentTargets_Z(3),4) ' m']); 
+                                                                                      
+disp(['    PSA-side AAP mounting face locations, relative to PSA coordinate system: Radius = ' num2str(PSASideAAPFace_Radius,8) ' m;  ' ...
+                                                                            'Angles = ' num2str(PSASideAAPFace_Angles(1),4) ', ' num2str(PSASideAAPFace_Angles(2),4) ', ' num2str(PSASideAAPFace_Angles(3),4) ' degrees;  ' ...
+                                                                            'Z = ' num2str(PSASideAAPFace_Z,8) ' m']);
+disp(['    Nominal distance from optical surface to cell nodes (MUST BE ADJUSTED IF DESIGN CHANGES) : ', num2str(dNormalM1OSToCellNode)]);
+disp(['    Nominal distance from M1 Cell top chord centerline to AAP Post mounting face : ', num2str(dZTopChordToAAPFace)]);
+disp(['    Nominal distance from AAP Post mounting face to AAP center: ', num2str(dZAAPFaceToAAPCenter)]);
+disp(['    PSA-side AAP center locations, relative to PSA coordinate system: Radius = ' num2str(PSASideAAPFace_Radius,8) ' m;  ' ...
+                                                                            'Angles = ' num2str(PSASideAAPFace_Angles(1),4) ', ' num2str(PSASideAAPFace_Angles(2),4) ', ' num2str(PSASideAAPFace_Angles(3),4) ' degrees;  ' ...
+                                                                            'Z = ' num2str(PSASideAAPFace_Z + dZAAPFaceToAAPCenter,8) ' m']);
+
 
 %######################################## Main Calculation Section ######################################## 
 dt=cputime-tstart;
@@ -145,7 +231,8 @@ s=a*cos(30*pi/180);  % radius of inscribed circle in base pattern (i.e. distance
 SectorID='ABCDEF';  % sector identification characters (1=A,... 6=F)
 
 % Calculate coordinates of Cell-PSA interface nodes in the PSA local system
-CellInterface_PSA=[CellInterface_Radius*cos(CellInterface_Angles*pi/180); CellInterface_Radius*sin(CellInterface_Angles*pi/180); CellInterface_Z*ones(size(CellInterface_Angles))];   % each column contains coordinates of one SSA support point, expressed in the PSA system
+PSASideAAPFace_PSA=[PSASideAAPFace_Radius*cos(PSASideAAPFace_Angles*pi/180); PSASideAAPFace_Radius*sin(PSASideAAPFace_Angles*pi/180); PSASideAAPFace_Z*ones(size(PSASideAAPFace_Angles))];   % each column contains coordinates of one SSA support point, expressed in the PSA system
+PSASideAAPCenter_PSA=[PSASideAAPFace_Radius*cos(PSASideAAPFace_Angles*pi/180); PSASideAAPFace_Radius*sin(PSASideAAPFace_Angles*pi/180); (PSASideAAPFace_Z+dZAAPFaceToAAPCenter)*ones(size(PSASideAAPFace_Angles))];   % each column contains coordinates of one SSA support point, expressed in the PSA system
 
 % Calculate coordinates of Actuator origins in the PSA local system
 ActOrigin_PSA=[ActOrigin_Radius*cos(ActOrigin_Angles*pi/180); ActOrigin_Radius*sin(ActOrigin_Angles*pi/180); ActOrigin_Z*ones(size(ActOrigin_Angles))];   % each column contains coordinates of one SSA support point, expressed in the PSA system
@@ -155,7 +242,7 @@ ActOrigin_PSA=[ActOrigin_Radius*cos(ActOrigin_Angles*pi/180); ActOrigin_Radius*s
                                                                             % see ">>help CreateBasePattern" for more info
 
 % Apply Scaling Rule: scaled Radial Position = Rj*(1 + Alpha*(Rmax/k)^2)  / (1 + Alpha*(Rj/k)^2)
-Rvtx_M1=sqrt(BaseVertex_M1(1,:,:).^2+BaseVertex_M1(2,:,:).^2);  % radii to of vertices of base pattern, before scaling
+Rvtx_M1=sqrt(BaseVertex_M1(1,:,:).^2+BaseVertex_M1(2,:,:).^2);  % radii to vertices of base pattern, before scaling
 Rctr_M1=sqrt(BaseCenter_M1(1,:).^2+BaseCenter_M1(2,:).^2);      % radii to centers of hexagons in base pattern, before scaling
 RmaxBP=max(max(Rvtx_M1));  % maximum radius to any vertex, before scaling
 scale=1+ScalingParam*(RmaxBP/Opt_k)^2;  % common multiplier for scaling rule
@@ -186,8 +273,54 @@ Radius=[];
 Clocking=[];
 Irregularity=[];
 
+superHexPoints = [];
+
 % Preallocate array memory for speed of execution
 Vertex_PSA=zeros(3,6,n_segments);
+
+
+
+
+
+
+% Calculate coordinates of cell nodes: cell nodes are located at a distance dNormalM1OSToCellNode below vertices 1,3, and 5 of each segment, along the local normal to the optical surface
+VnCnACE=[2 4 6];  % list of vertices to use for cell nodes in sectors A, C, and E
+VnCnBDF=[1 3 5];  % list of vertices to use for cell nodes in sectors B, D, and F
+for i=1:n_segments
+    for j=1:3 % loop on 3 selected vertices
+        VnACE=VnCnACE(j);
+        VnBDF=VnCnBDF(j);
+        % calculate local normal vector
+        VZACE=[-dZdR_V(1,VnACE,i)*cos(Tvtx_M1(1,VnACE,i)) -dZdR_V(1,VnACE,i)*sin(Tvtx_M1(1,VnACE,i)) 1]';
+        VZACE=VZACE/norm(VZACE);     % normalize unit normal to opt surface
+        VZBDF=[-dZdR_V(1,VnBDF,i)*cos(Tvtx_M1(1,VnBDF,i)) -dZdR_V(1,VnBDF,i)*sin(Tvtx_M1(1,VnBDF,i)) 1]';
+        VZBDF=VZBDF/norm(VZBDF);     % normalize unit normal to opt surface
+        % Calculate position of cell "node"
+        CellNode_M1_ACE(:,j,i)=UngappedVertex_M1(:,VnACE,i)-dNormalM1OSToCellNode*VZACE;
+        CellNode_M1_BDF(:,j,i)=UngappedVertex_M1(:,VnBDF,i)-dNormalM1OSToCellNode*VZBDF;
+        % and positions of cell top chord nodes
+        %CellTopChordNode_M1(:,j,i)=UngappedVertex_M1(:,Vn,i)-(dNormalM1OSToCellNode-dNormalAAPFaceNodeToCellNode)*VZ;
+    end;
+end;
+% calculate coordinates of cell-side interface nodes (2/3 along each cell top chord centerline) and direction of top chord centerlines
+for i=1:n_segments
+    for j=1:3  % loop on 3 SSA interface nodes
+        k=j+1; 
+        if k>3, k=1; end;
+        CellTopChordThirdPoints_M1_ACE(:,j,i)=(2/3)*CellNode_M1_ACE(:,j,i) + (1/3)*CellNode_M1_ACE(:,k,i);
+        CellTopChordVectors_M1_ACE(:,j,i)=CellNode_M1_ACE(:,k,i)-CellNode_M1_ACE(:,j,i);
+        CellTopChordThirdPoints_M1_BDF(:,j,i)=(1/3)*CellNode_M1_BDF(:,j,i) + (2/3)*CellNode_M1_BDF(:,k,i);
+        CellTopChordVectors_M1_BDF(:,j,i)=CellNode_M1_BDF(:,k,i)-CellNode_M1_BDF(:,j,i);
+    end;
+end;
+
+
+
+
+
+
+
+
 
 % -------------------------------------------- START MAIN LOOP ON SEGMENTS ------------------------------------------------
 % this is the main calculation loop; it performs all key calculations for all segments in sector A
@@ -270,17 +403,110 @@ for i=1:n_segments
         UngappedVertex_PSA(:,j,i)=RPSA_M1(:,:,i)'*(UngappedVertex_M1(:,j,i)-Center_M1(:,i));  % calculate ungapped vertex coordinates in PSA system
     end;
     
+    
+    
+    % Calculate coordinates of cell side AAP Centers
+    % new assumption: cell top chord trusses are nominally aligned such that 
+    %  * their top chord centerline goes from cell node to cell node
+    %  * their "roll" angulation about the top chord centerline is such that the metal plate they are cut from is nominally parallel to Z_PSA
+    dZTopChordToAAPFace_PSA = -1.0 * (dZTopChordToAAPFace);  % see below: vector used to offset points along -Z, so these numbers must be positive
+    dZTopChordToAAPCenter_PSA = -1.0 * (dZTopChordToAAPFace + dZAAPFaceToAAPCenter);  % see below: vector used to offset points along -Z, so these numbers must be positive
+        
+    CellTopChordThirdPoints_PSA_ACE = RPSA_M1(:,:,i)'*(CellTopChordThirdPoints_M1_ACE(:,:,i)-Center_M1(:,i)*[1 1 1]);
+    CellTopChordThirdPoints_PSA_BDF = RPSA_M1(:,:,i)'*(CellTopChordThirdPoints_M1_BDF(:,:,i)-Center_M1(:,i)*[1 1 1]);
+
+    % build a unit vector along the nominal AAP post (orthogonal to top chord centerline and // to Z_PSA)
+    % Sectors ACE
+    for j = 1:3
+        topChordVector_M1_ACE = CellTopChordVectors_M1_ACE(:,j,i);
+        ZPSA_M1 = RPSA_M1(:,3,i);
+        normalToTopChordFace_M1_ACE = cross(topChordVector_M1_ACE, ZPSA_M1);
+        AAPPostVector_M1_ACE = cross(normalToTopChordFace_M1_ACE, topChordVector_M1_ACE);
+        if AAPPostVector_M1_ACE(3) > 0 % make sure AAPPostVector points away from M1 surface
+            AAPPostVector_M1_ACE = -1.0 * AAPPostVector_M1_ACE;
+        end;
+        % and normalize
+        AAPPostVector_M1_ACE = AAPPostVector_M1_ACE / norm(AAPPostVector_M1_ACE);
+        CellSideAAPFace_M1_ACE(:,j,i) = CellTopChordThirdPoints_M1_ACE(:,j,i) + AAPPostVector_M1_ACE * dZTopChordToAAPFace_PSA;
+        CellSideAAPCenter_M1_ACE(:,j,i) = CellTopChordThirdPoints_M1_ACE(:,j,i) + AAPPostVector_M1_ACE * dZTopChordToAAPCenter_PSA;
+    end;
+    CellSideAAPFace_PSA_ACE(:,:,i)=RPSA_M1(:,:,i)'*(CellSideAAPFace_M1_ACE(:,:,i)-Center_M1(:,i)*[1 1 1]);
+    CellSideAAPCenter_PSA_ACE(:,:,i)=RPSA_M1(:,:,i)'*(CellSideAAPCenter_M1_ACE(:,:,i)-Center_M1(:,i)*[1 1 1]);
+    
+    % Sectors BDF
+    for j = 1:3
+        topChordVector_M1_BDF = CellTopChordVectors_M1_BDF(:,j,i);
+        ZPSA_M1 = RPSA_M1(:,3,i);
+        normalToTopChordFace_M1_BDF = cross(topChordVector_M1_BDF, ZPSA_M1);
+        AAPPostVector_M1_BDF = cross(normalToTopChordFace_M1_BDF, topChordVector_M1_BDF);
+        if AAPPostVector_M1_BDF(3) > 0 % make sure AAPPostVector points away from M1 surface
+            AAPPostVector_M1_BDF = -1.0 * AAPPostVector_M1_BDF;
+        end;
+        % and normalize
+        AAPPostVector_M1_BDF = AAPPostVector_M1_BDF / norm(AAPPostVector_M1_BDF);
+        CellSideAAPFace_M1_BDF(:,j,i) = CellTopChordThirdPoints_M1_BDF(:,j,i) + AAPPostVector_M1_BDF * dZTopChordToAAPFace_PSA;
+        CellSideAAPCenter_M1_BDF(:,j,i) = CellTopChordThirdPoints_M1_BDF(:,j,i) + AAPPostVector_M1_BDF * dZTopChordToAAPCenter_PSA;
+    end;
+    CellSideAAPFace_PSA_BDF(:,:,i)=RPSA_M1(:,:,i)'*(CellSideAAPFace_M1_BDF(:,:,i)-Center_M1(:,i)*[1 1 1]);
+    CellSideAAPCenter_PSA_BDF(:,:,i)=RPSA_M1(:,:,i)'*(CellSideAAPCenter_M1_BDF(:,:,i)-Center_M1(:,i)*[1 1 1]);
+    
+    % calculate coordinates of PSA-side Cell-PSA interface nodes in M1 frame
+    PSASideAAPFace_M1(:,:,i)=RPSA_M1(:,:,i)*PSASideAAPFace_PSA+Center_M1(:,i)*[1 1 1];
+    PSASideAAPCenter_M1(:,:,i)=RPSA_M1(:,:,i)*PSASideAAPCenter_PSA+Center_M1(:,i)*[1 1 1];
+    
+    % compute AAP adjustments for this segment
+    for j=1:3 % loop on 3 AAPs per segment
+        dX=CellSideAAPCenter_PSA_ACE(1,j,i) - PSASideAAPCenter_PSA(1,j);
+        dY=CellSideAAPCenter_PSA_ACE(2,j,i) - PSASideAAPCenter_PSA(2,j);
+        AAPRadialOffset(j,i) = sqrt(dX^2+dY^2);
+        AAPVerticalOffset(j,i) = CellSideAAPCenter_PSA_ACE(3,j,i) - PSASideAAPCenter_PSA(3,j);
+    end;
+    
+    
+    
+    % accumulate 2D (XY_PSA) projections of gapped vertices for calculation of superhex
+    superHexPoints = [superHexPoints Vertex_PSA(1:2,:,i)];
+    
     % calculate vector from segment center to M1 center, in PSA frame, and the clocking angle of the projection of that vector into XY_PSA, relative to X_PSA
     ToCenter_PSA(:,i)=RPSA_M1(:,:,i)'*(-1*Center_M1(:,i));  % express the vector pointing from O_PSA to O_M1 in the PSA system
     ToCenterAngle(i)=atan2(ToCenter_PSA(2,i),ToCenter_PSA(1,i));  % calculate clocking angle of that vector relative to X_PSA, in projection in the XY_PSA plane
         
-    % calculate local (PSA) coordinates of segment fiducials on optical surface
-    Fiducial_PSA(1,:,i)=Fiducial_Radius*cos(Fiducial_Angles*pi/180);
-    Fiducial_PSA(2,:,i)=Fiducial_Radius*sin(Fiducial_Angles*pi/180);
-    Fiducial_PSA(3,:,i)=OpticalLocal(Fiducial_PSA(1,:,i),Fiducial_PSA(2,:,i),Opt_k,Opt_K,Center_M1(:,i),RPSA_M1(:,1,i),RPSA_M1(:,2,i),RPSA_M1(:,3,i));
     
-    % calculate coordinates of Cell-PSA interface nodes in M1 frame
-    CellInterface_M1(:,:,i)=RPSA_M1(:,:,i)*CellInterface_PSA+Center_M1(:,i)*[1 1 1];
+    % calculate the angle, measured about PSACRS_Z (or, in the PSACRS_XY plane), from the intersection between planes PSACRS_XY and M1CRS_RZ to PSACRS_X  
+    % the intersection in question can be computed as a vector which is
+    % perpendicular to PSACRS_Z and to M1CRS_Theta
+    M1R_M1 = Center_M1(:,i);
+    M1Z_M1 = [0; 0; 1];
+    M1Theta_M1 = cross(M1Z_M1,M1R_M1);
+    M1Theta_PSA = RPSA_M1(:,:,i)'*M1Theta_M1;
+    PSAZ_PSA = [0; 0; 1];
+    M1RadialVector_PSA = cross(M1Theta_PSA, PSAZ_PSA);
+    AngleFromXtoM1RPlane_PSA(i) = -atan2(M1RadialVector_PSA(2),M1RadialVector_PSA(1));
+
+    
+    
+    % calculate local (PSA) coordinates of segment fiducials on optical surface
+    OSFiducials_PSA(1,:,i)=OSFiducials_Radius*cos(OSFiducials_Angles*pi/180);
+    OSFiducials_PSA(2,:,i)=OSFiducials_Radius*sin(OSFiducials_Angles*pi/180);
+    OSFiducials_PSA(3,:,i)=OpticalLocal(OSFiducials_PSA(1,:,i),OSFiducials_PSA(2,:,i),Opt_k,Opt_K,Center_M1(:,i),RPSA_M1(:,1,i),RPSA_M1(:,2,i),RPSA_M1(:,3,i));
+    
+    OSProbes1_PSA(1,:,i)=OSProbes1_Radius*cos(OSProbes1_Angles*pi/180);
+    OSProbes1_PSA(2,:,i)=OSProbes1_Radius*sin(OSProbes1_Angles*pi/180);
+    OSProbes1_PSA(3,:,i)=OpticalLocal(OSProbes1_PSA(1,:,i),OSProbes1_PSA(2,:,i),Opt_k,Opt_K,Center_M1(:,i),RPSA_M1(:,1,i),RPSA_M1(:,2,i),RPSA_M1(:,3,i));
+    
+    OSProbes2_PSA(1,:,i)=OSProbes2_Radius*cos(OSProbes2_Angles*pi/180);
+    OSProbes2_PSA(2,:,i)=OSProbes2_Radius*sin(OSProbes2_Angles*pi/180);
+    OSProbes2_PSA(3,:,i)=OpticalLocal(OSProbes2_PSA(1,:,i),OSProbes2_PSA(2,:,i),Opt_k,Opt_K,Center_M1(:,i),RPSA_M1(:,1,i),RPSA_M1(:,2,i),RPSA_M1(:,3,i));
+    
+    SubcellAlignmentTargets_PSA(1,:,i)=SubcellAlignmentTargets_Radius*cos(SubcellAlignmentTargets_Angles*pi/180);
+    SubcellAlignmentTargets_PSA(2,:,i)=SubcellAlignmentTargets_Radius*sin(SubcellAlignmentTargets_Angles*pi/180);
+    SubcellAlignmentTargets_PSA(3,:,i)=SubcellAlignmentTargets_Z;
+    
+    % and transform into global M1CRS 
+    OSFiducials_M1(:,:,i) = RPSA_M1(:,:,i)*OSFiducials_PSA(:,:,i)+Center_M1(:,i)*[1 1 1];
+    OSProbes1_M1(:,:,i) = RPSA_M1(:,:,i)*OSProbes1_PSA(:,:,i)+Center_M1(:,i)*[1 1 1];
+    OSProbes2_M1(:,:,i) = RPSA_M1(:,:,i)*OSProbes2_PSA(:,:,i)+Center_M1(:,i)*[1 1 1];
+    SubcellAlignmentTargets_M1(:,:,i) = RPSA_M1(:,:,i)*SubcellAlignmentTargets_PSA(:,:,i)+Center_M1(:,i)*[1 1 1];
     
     % calculate coordinates of actuator origins and segment rotation points, in M1 frame
     ActOrigin_M1(:,:,i)=RPSA_M1(:,:,i)*ActOrigin_PSA+Center_M1(:,i)*[1 1 1];
@@ -317,24 +543,188 @@ for i=1:n_segments
         % calculate Edge Sensor Coordinate systems in PSACRS
         ESOrigin_PSA(:,i,j)=RPSA_M1(:,:,i)'*(ESOrigin_M1(:,i,j)-Center_M1(:,i));
         RES_PSA(:,:,i,j)=RPSA_M1(:,:,i)'*RES_M1(:,:,i,j);
-    end;  % end loop on 12 edges sensors for this segment 
+        
+        if mod(j,2) % odd
+            ESPOrigin_PSA(:,i,j) = ESOrigin_PSA(:,i,j) + RES_PSA(:,:,i,j)*(ESPOrigin_ESCRS);  % per e-mail from E. Williams, 6/24/2012 and 7/??/2012
+        else % even
+            ESPOrigin_PSA(:,i,j) = ESOrigin_PSA(:,i,j) + RES_PSA(:,:,i,j)*(ESPOrigin_ESCRS.*[1; -1; 1]);  % per e-mail from E. Williams, 6/24/2012 and 7/??/2012
+        end;
+        
+        ESPOrigin_M1(:,i,j) = RPSA_M1(:,:,i)*ESPOrigin_PSA(:,i,j) + Center_M1(:,i);
+                
+    end;  % end loop on 12 edges sensors for this segment
+    
+    
+    % Compute off-axis Zernike expansion of segment surfaces
+    
+    % first, compute cylindrical monomial expansion per Nelson & Temple-Raston 1982
+    % copy key variables for ease of notation
+    e = Rctr_M1(i) / Opt_k;
+    k = Opt_k;
+    K = Opt_K;
+    r = NominalRadius;  % !!!!! NOTE that I am using the radius of the BFRH for the prescription calculation...
+    prescriptionRadius(i) = r;  % store that radius
+    monomials(i).a20 = (r^2/k) * (2.0 - K * e^2) / 4.0 / (1.0 - K * e^2)^(3.0/2.0);
+    monomials(i).a22 = (r^2/k) * (K * e^2) / 4.0 / (1.0 - K * e^2)^(3.0/2.0);
+    monomials(i).a31 = (r^3/k^2) * K * e * (1.0 - (K+1.0) * e^2)^0.5 * (4.0 - K * e^2) / 8.0 / (1.0 - K * e^2)^3.0;
+    monomials(i).a33 = (r^3/k^2) * K^2 * e^3 * (1.0 - (K+1.0) * e^2)^0.5 / 8.0 / (1.0 - K * e^2)^3.0;
+    monomials(i).a40 = (r^4/k^3) * ( 8.0*(1.0+K) - 24.0*K*e^2 + 3.0*K^2*e^4*(1.0-3.0*K) - K^3*e^6*(2.0-K)) / 64.0 / (1.0 - K * e^2)^(9.0/2.0);
+    monomials(i).a42 = (r^4/k^3) * ( K * e^2 * ( 2.0*(1.0+3.0*K) - (9.0+7.0*K)*K*e^2 + (2.0+K)*K^2*e^4 ) ) / 16.0 / (1.0 - K * e^2)^(9.0/2.0);
+    monomials(i).a44 = (r^4/k^3) * ( K^2 * e^4 * ( 1.0 + 5.0*K - K*e^2*(6.0+5.0*K) ) ) / 64.0 / (1.0 - K * e^2)^(9.0/2.0);
+    % the following were not expanded in Nelson's paper so I am setting them to zero as a place holder
+    monomials(i).a60 = 0.0;
+    monomials(i).a80 = 0.0;
+    monomials(i).a51 = 0.0;
+    
+    % now convert the cylindrical monomial coefficients into Zernike coefficients, using the BW normalization, per Nelson June 22, 2011 and Eric Williams (e-mail to E.Ponslet 06/27/2011) 
+    BWZernike(i).c20 = ( monomials(i).a20/2.0 + monomials(i).a40/2.0 + 9.0*monomials(i).a60/20.0 + 2.0*monomials(i).a80/5.0 );
+    BWZernike(i).c40 = ( monomials(i).a40/6.0 + monomials(i).a60/4.0 + 2.0*monomials(i).a80/7.0 );
+    BWZernike(i).c22 = ( monomials(i).a22 + 3.0*monomials(i).a42/4.0 );
+    BWZernike(i).c42 = ( monomials(i).a42/4.0 );
+    BWZernike(i).c31 = ( monomials(i).a31/3.0 + 2.0*monomials(i).a51/5.0 );
+    BWZernike(i).c33 = monomials(i).a33;
+    
+    % and Noll normalizations: ( per Nelson, June 22, 2011 )
+    NollZernike(i).c20 = (1.0/sqrt(3.0)) * BWZernike(i).c20;
+    NollZernike(i).c40 = (1.0/sqrt(5.0)) * BWZernike(i).c40;
+    NollZernike(i).c22 = (1.0/sqrt(6.0)) * BWZernike(i).c22;
+    NollZernike(i).c42 = (1.0/sqrt(10.0)) * BWZernike(i).c42;
+    NollZernike(i).c31 = (1.0/sqrt(8.0)) * BWZernike(i).c31;
+    NollZernike(i).c33 = (1.0/sqrt(8.0)) * BWZernike(i).c33;
+    
+    % and BW Zernike coefficients rotated into PSA coordinates
+    angle = ToCenterAngle(i)+pi;
+    
+    m = 0;
+    PSABWZernike(i).c20 = BWZernike(i).c20;
+    PSABWZernike(i).c40 = BWZernike(i).c40;
+    
+    m = 1;
+    R11 = cos(m*angle);
+    R21 = -sin(m*angle);
+    PSABWZernike(i).c31 = R11 * BWZernike(i).c31;
+    PSABWZernike(i).c3m1 = R21 * BWZernike(i).c31;  
+    
+    m = 2;
+    R11 = cos(m*angle);
+    R21 = -sin(m*angle);
+    PSABWZernike(i).c22 = R11 * BWZernike(i).c22;
+    PSABWZernike(i).c2m2 = R21 * BWZernike(i).c22;  
+    PSABWZernike(i).c42 = R11 * BWZernike(i).c42;
+    PSABWZernike(i).c4m2 = R21 * BWZernike(i).c42; 
+    
+    m = 3;
+    R11 = cos(m*angle);
+    R21 = -sin(m*angle);
+    PSABWZernike(i).c33 = R11 * BWZernike(i).c33;
+    PSABWZernike(i).c3m3 = R21 * BWZernike(i).c33;  
+    
     
 end;
 % ---------------------------------------------- END OF MAIN LOOP ON SEGMENTS ---------------------------------------------
+
+
+
+
+
+
+disp(['AAP adjustments: Radial: Min = ',num2str(min(min(AAPRadialOffset)))]);
+disp(['                         Max = ',num2str(max(max(AAPRadialOffset)))]);
+disp(['                         Mean = ',num2str(mean(mean(AAPRadialOffset)))]);
+disp(['                 Vertical: Min = ',num2str(min(min(AAPVerticalOffset)))]);
+disp(['                           Max = ',num2str(max(max(AAPVerticalOffset)))]);
+disp(['                           Mean = ',num2str(mean(mean(AAPVerticalOffset)))]);
+
+
+
+
+
+% FOLLOWING CODE FOR VERIFICATION OF OPTIMAL PSA SUPPORT DIMENSIONS
+% check the min/max values of the Z coordinate of the cell-side interface nodes in PSA
+minZ = min(min(CellSideAAPCenter_PSA_ACE(3,:,:)));
+maxZ = max(max(CellSideAAPCenter_PSA_ACE(3,:,:)));
+meanZ = mean(mean(CellSideAAPCenter_PSA_ACE(3,:,:)));
+disp(['  Min Z of all cell-side interface nodes, as expressed in PSA = ', num2str(minZ)]);
+disp(['  Max Z of all cell-side interface nodes, as expressed in PSA = ', num2str(maxZ)]);
+disp(['  Mid-range Z of all cell-side interface nodes, as expressed in PSA = ', num2str((maxZ+minZ)/2.0)]);
+disp(['  Mean Z of all cell-side interface nodes, as expressed in PSA = ', num2str(meanZ)]);
+
+
+% ############################################################# old code reintroduced to compute optimal radial location of AAP points #####################################################
+%################################## reintroducing optimization of radial location of SSA-Cell interface nodes ##################
+% Calculate coordinates of Cell-SSA interface nodes (SSA-side) in the PSA
+% local system - in Sector A only
+RSSASup = a/2/cos(30*pi/180);   % initial guess 
+
+% following statement not accepted under this version of Matlab... replacing with brute force search below
+%gamma = fminbnd(@(x) adjust(x,IntfNode_PSA,RSSASup,n_segments),0.5,1.5);  % iterative refinement (adjust multiplier gamma)
+% brute force optimization of AAP radius
+minAAPRange = 1e20;
+minMult = 1.00;
+maxMult = 1.02;
+dMult = 1e-6;
+for multiplier= minMult:dMult:maxMult
+    f = adjust(multiplier,CellSideAAPCenter_PSA_ACE,RSSASup,n_segments);
+    if f<minAAPRange
+        minAAPRange = f;
+        multiplierForMinAAPRange = multiplier;
+    end;
+end;
+
+if (multiplierForMinAAPRange==minMult) | (multiplierForMinAAPRange==maxMult)
+    disp('multiplier optimization incomplete - check limits');
+    return;
+end;
+
+% calculate best value of RSSASup and ZSSASup (use mid-range value of Z_PSA of the cell-side interface nodes)
+disp(['  Best value multiplier = ', num2str(multiplierForMinAAPRange)]);
+RSSASup=RSSASup*multiplierForMinAAPRange;    % implement multiplier
+ZSSASup=(min(min(CellSideAAPCenter_PSA_ACE(3,:,:)))+max(max(CellSideAAPCenter_PSA_ACE(3,:,:))))/2;
+disp(['  Optimal Radius to PSA AAP = ' num2str(RSSASup,8) ' m']);
+disp(['  Optimal Elevation of PSA AAP = ' num2str(ZSSASup,8) ' m']);
+
+
+
+
+
+
+
+
+
+
+
+
+
+%######################################## Compute size of superhex ########################################
+superHexRadius = MinContainingHexRadius(superHexPoints, 1e-6);  % to one micron
 
 
 %######################################## Propagate some data to the other five sectors ########################################
 dt=cputime-tstart;
 disp(['T=' num2str(dt) '  Replicating data to sectors B through F']);
 % Propagate some data to the other six sectors
+
+CellNode_M1=CellNode_M1_ACE;
+CellTopChordThirdPoints_M1=CellTopChordThirdPoints_M1_ACE;
+% AAP points
+CellSideAAPFace_M1 = CellSideAAPFace_M1_ACE;
+CellSideAAPCenter_M1 = CellSideAAPCenter_M1_ACE;
+
 % segment numbering across all sectors is: i + (j-1)*n_segments, where i is segment number in sector A, and j=1..6 for sectors A..F
 for j=2:6 % loop on sector number 2 to 6
     Rangle=(j-1)*pi/3; % rotation angle from sector #1 (A) to sector #j 
     R=[cos(Rangle) -sin(Rangle) 0; sin(Rangle) cos(Rangle) 0; 0  0  1]; % rotation matrix from sector #1 (A) to sector #j, in M1_CRS (identity matrix if j=1) 
     for i=1:n_segments  % for each segment type, fill in data for sector j by applying rotation matrix to data from sector 1 (A)
         iseg=i+(j-1)*n_segments;  % extended segment number goes from 1 to 6*n_segments
+        % Optical surface fiducials
+        OSFiducials_M1(:,:,iseg)=R*OSFiducials_M1(:,:,i);
+        % Optical surface probe points
+        OSProbes1_M1(:,:,iseg)=R*OSProbes1_M1(:,:,i);
+        OSProbes2_M1(:,:,iseg)=R*OSProbes2_M1(:,:,i);
+        % subcell alignment targets
+        SubcellAlignmentTargets_M1(:,:,iseg)=R*SubcellAlignmentTargets_M1(:,:,i);
         % Cell-PSA interface points
-        CellInterface_M1(:,:,iseg)=R*CellInterface_M1(:,:,i);
+        PSASideAAPCenter_M1(:,:,iseg)=R*PSASideAAPCenter_M1(:,:,i);
         % Actuator locations and centers of rotation
         ActOrigin_M1(:,:,iseg)=R*ActOrigin_M1(:,:,i);
         ActCOR_M1(:,iseg)=R*ActCOR_M1(:,i);
@@ -351,6 +741,21 @@ for j=2:6 % loop on sector number 2 to 6
             ESOrigin_M1(:,iseg,k)=R*ESOrigin_M1(:,i,k);
             RES_M1(:,:,iseg,k)=R*RES_M1(:,:,i,k);
         end;
+        % cell top chord nodes
+        if (j == 3 || j==5)
+            CellNode_M1(:,:,iseg)=R*CellNode_M1_ACE(:,:,i);
+            CellTopChordThirdPoints_M1(:,:,iseg)=R*CellTopChordThirdPoints_M1_ACE(:,:,i);
+            % AAP points
+            CellSideAAPFace_M1(:,:,iseg) = R*CellSideAAPFace_M1_ACE(:,:,i);
+            CellSideAAPCenter_M1(:,:,iseg) = R*CellSideAAPCenter_M1_ACE(:,:,i);
+        else
+            CellNode_M1(:,:,iseg)=R*CellNode_M1_BDF(:,:,i);
+            CellTopChordThirdPoints_M1(:,:,iseg)=R*CellTopChordThirdPoints_M1_BDF(:,:,i);
+            % AAP points
+            CellSideAAPFace_M1(:,:,iseg) = R*CellSideAAPFace_M1_BDF(:,:,i);
+            CellSideAAPCenter_M1(:,:,iseg) = R*CellSideAAPCenter_M1_BDF(:,:,i);
+        end;
+        
     end;
 end;
 
@@ -367,7 +772,7 @@ for i=1:6*n_segments
     k=0;  % intialize counter for number of neighbors of segment #i
     for j=1:6*n_segments
         dist=norm(Center_M1(:,i)-Center_M1(:,j));  % distance from center of segment #i to center of segment #j
-        if dist<2.5*s & i~=j % neighboring segments are aproximately 2*s away from one another
+        if dist<2.5*s && i~=j % neighboring segments are aproximately 2*s away from one another
             k=k+1;
             Neighbor(i,k)=j;
         end;
@@ -385,7 +790,7 @@ for i=1:6*n_segments  % loop through all segments of all sectors
             im=Neighbor(i,k);  % index of segment neighboring segment i
             for jm=1:12  % loop through all edge sensors again, looking for mating sensor
                 dist=norm(ESOrigin_M1(:,i,j)-ESOrigin_M1(:,im,jm));  % calculate distance between two edge sensors
-                if dist<ES_Dist/10 & i~=im & j~=jm  % tolerance on coincidence of edge sensors (numerical roundoff); note that non-mating sensors are at least ~2*ES_Dist*sin(60deg) apart
+                if dist<ES_Dist/10 && i~=im && j~=jm  % tolerance on coincidence of edge sensors (numerical roundoff); note that non-mating sensors are at least ~2*ES_Dist*sin(60deg) apart
                    ESmate(i,j,:)=[im jm];  % if sensor im,jm is closer to sensor i,j than the set tolerance, and sensors (i,j) is distinct from sensor (im,jm), then they are a mating pair;
                                            % otherwise, leave ESmate as initialized (i.e. zero), indicating no mate found.
                 end;
@@ -469,7 +874,7 @@ for i=1:n_segments
             AAP_locations(i,1,k,j)=j;  % sector number
             AAP_locations(i,2,k,j)=i;  % segment number
             AAP_locations(i,3,k,j)=k;  % AAP number
-            AAP_locations(i,4:6,k,j)=CellInterface_M1(:,k,i+(j-1)*n_segments);  % x,y,z coordinates in M1_CRS
+            AAP_locations(i,4:6,k,j)=PSASideAAPCenter_M1(:,k,i+(j-1)*n_segments);  % x,y,z coordinates in M1_CRS
         end;
     end;
     
@@ -495,7 +900,7 @@ for i=1:n_segments
         end;
     end;
         
-    % Coordinates of points on the optical surface (in PSACRS) where assembly tooling will contact
+    % Coordinates of optical surface fiducials (in PSACRS)
     % row = segment number, 1:82
     % column =
         %1  segment number 1:82
@@ -505,7 +910,7 @@ for i=1:n_segments
     for k=1:3
         Tooling_data(i,1,k)=i;  % segment number
         Tooling_data(i,2,k)=k;  % contact point number
-        Tooling_data(i,3:5,k)=Fiducial_PSA(:,k,i)';  % coordinates of tooling point in PSACRS
+        Tooling_data(i,3:5,k)=OSFiducials_PSA(:,k,i)';  % coordinates of tooling point in PSACRS
     end;
     
     % Edge sensor locations and orientations (in M1CRS Cartesian Coordinates), and mating
@@ -680,9 +1085,10 @@ Mean_a=sqrt(2*Mean_Area/(3*sqrt(3)));
 %###################################################### SEGMENTATION DATAFILE ###########################################################
 dt=cputime-tstart;
 disp(['T=' num2str(dt) '  Producing segmentation data file (ASCII)']);
-fid=fopen('NewSegm.txt','wt');
+filename=['NewSegm_' strrep(date,'-','') '.txt']
+fid=fopen(filename,'wt');
 
-fprintf(fid,'TMT M1 SEGMENTATION DATA - Eric Ponslet - HYTEC Inc. - %s\n',datestr(now));
+fprintf(fid,'TMT M1 SEGMENTATION DATA - Eric Ponslet - %s\n',datestr(now));
 fprintf(fid,'This file was generated by NewSegm.m Matlab program\n');
 fprintf(fid,'Unless otherwise specified, all linear dimensions are in meters, and all angles are in degrees\n');
 fprintf(fid,' \n');
@@ -693,6 +1099,7 @@ fprintf(fid,'   M1 Conic Constant: K = %12.9f \n',Opt_K);
 fprintf(fid,'   Base pattern hex diameter: %7.4f m\n',2*a);
 fprintf(fid,'   Inter-segment gap: %7.5f m (1/2 gap applied all around every segment (including outer edges of array)\n',Gap);
 fprintf(fid,'   Segment chamfer width (projected into XY_PSA): %7.5f m\n',Chamfer);
+fprintf(fid,'   Edge sensor geometry defined in TMT.M1.M1CS-INT-001.  Edge sensor located %10.6f m from ungapped vertices\n',ES_Dist);
 fprintf(fid,'1B: SEGMENTATION PARAMETERS \n');
 fprintf(fid,'   Scaling Parameter: alpha = %7.4f (radial scaling = (1+alpha*(Rmax/k)^2)/(1+alpha*(R/k)^2)\n',ScalingParam);
 fprintf(fid,'1C: NOMINAL SEGMENT SIZE \n');
@@ -724,6 +1131,26 @@ fprintf(fid,'                spread (max/min-1) = %6.2f percent\n',100*(MaxRadiu
 fprintf(fid,'   Mean segment area = %9.2f m^2\n',Mean_Area);
 fprintf(fid,'   Diameter of segment of mean area = %9.5f m\n',2*Mean_a);
 fprintf(fid,'   Mean diameter of BFRH = %9.5f m\n',2*mean(Radius));
+fprintf(fid,'1F: SUPERHEX \n');
+fprintf(fid,'   The SuperHex is a minimum radius regular hexagon in the X_PSA plane, centered at O_PSA, with two edges parallel to X_PSA, that contains the gapped vertices of all segment types projected in the XY_PSA plane\n');
+fprintf(fid,'   SuperHex Radius  = %13.6f m\n',superHexRadius);
+fprintf(fid,'   SuperHex Diameter = %13.6f m\n',superHexRadius*2.0);
+fprintf(fid,' \n');
+fprintf(fid,'1G: AAP Travel Range Optimization\n');
+fprintf(fid,'   The optimum radius for the fixed frame AAP Interface is determined in order to minimize the AAP travel range due to segmentation;\n');
+fprintf(fid,'   Fixed frame AAP interface radius: current value = %13.6f m\n', PSASideAAPFace_Radius);
+fprintf(fid,'                                     optimal value = %13.6f m\n', RSSASup);
+fprintf(fid,'   Locations of PSA-Side AAP flanges, in PSA system:\n');
+fprintf(fid,'        Angles = %6.1f, %6.1f, %6.1f degrees\n',PSASideAAPFace_Angles);
+fprintf(fid,'        Radius = %9.6f m (this value calculated above in section 1G)\n',PSASideAAPFace_Radius);
+fprintf(fid,'        Elevation = %9.6f m\n', PSASideAAPFace_Z);
+fprintf(fid,'   Distance from AAP mounting flanges to AAP centers: %9.6f m\n',abs(dZAAPFaceToAAPCenter));
+fprintf(fid,'   Locations of PSA-Side AAP Centers, in PSA system:\n');
+fprintf(fid,'        Angles = %6.1f, %6.1f, %6.1f degrees\n',PSASideAAPFace_Angles);
+fprintf(fid,'        Radius = %9.6f m (this value calculated above in section 1G)\n',PSASideAAPFace_Radius);
+fprintf(fid,'        Elevation = %9.6f m\n', PSASideAAPCenter_PSA(3,1,1));
+fprintf(fid,'   Maximum AAP Adjustment Ranges with current AAP interface radius:  radial = %13.6f\n',max(max(abs(AAPRadialOffset))));
+fprintf(fid,'                                                                     vertical = %13.6f\n',max(max(abs(AAPVerticalOffset))));
 fprintf(fid,' \n');
 fprintf(fid,'-----------------------------------------------  SECTION 2: DEFINITION OF PSA COORDINATE SYSTEMS -------------------------------------------\n');
 fprintf(fid,'DEFINITION OF PSA COORDINATE SYSTEMS - SECTOR A\n');
@@ -740,7 +1167,7 @@ for j=1:6 % loop on sector number
     end;
 end;
 fprintf(fid,' \n');
-fprintf(fid,'2B: ORIENTATIONS OF PSA COORDINATE SYSTEMS\n'); 
+fprintf(fid,'2B: ORIENTATIONS (UNIT VECTORS) OF PSA COORDINATE SYSTEMS\n'); 
 fprintf(fid,'seg#\t  X_M1(1xPSA)\t  Y_M1(1xPSA)\t  Z_M1(1xPSA)\t  X_M1(1yPSA)\t  Y_M1(1yPSA)\t  Z_M1(1yPSA)\t  X_M1(1zPSA)\t  Y_M1(1zPSA)\t  Z_M1(1zPSA)\n');
 for j=1:6 % loop on sector number
     for i=1:n_segments
@@ -749,7 +1176,7 @@ for j=1:6 % loop on sector number
 end;
 fprintf(fid,' \n');
 fprintf(fid,'-------------------------------------------  SECTION 3: UNGAPPED SEGMENT VERTEX COORDINATES -------------------------------------------------\n');
-fprintf(fid,'   Ungapped segment vertex coordinates in M1 coordinate system\n');
+fprintf(fid,'   Ungapped segment vertex coordinates in M1 coordinate system (M1CRS)\n');
 fprintf(fid,' \n');
 fprintf(fid,'3A1: UNGAPPED SEGMENT VERTEX COORDINATES EXPRESSED IN M1 COORDINATE SYSTEM - VERTICES 1 THROUGH 3 (meters)\n');
 fprintf(fid,'seg#\t   X_M1(vtx1)\t   Y_M1(vtx1)\t   Z_M1(vtx1)\t   X_M1(vtx2)\t   Y_M1(vtx2)\t   Z_M1(vtx2)\t   X_M1(vtx3)\t   Y_M1(vtx3)\t   Z_M1(vtx3)\n');
@@ -769,6 +1196,7 @@ end;
 fprintf(fid,' \n');
 fprintf(fid,'--------------------------------------------  SECTION 4: GAPPED SEGMENT VERTEX COORDINATES --------------------------------------------------\n');
 fprintf(fid,'   Gapped segment vertex coordinates (before chamfering) expressed in PSA system (3A1 and 3A2) and in M1 coordinate system (3B1 and 3B2)\n');
+fprintf(fid,'\n');
 fprintf(fid,'4A1: SEGMENT VERTEX COORDINATES EXPRESSED IN PSA COORDINATE SYSTEMS - VERTICES 1 THROUGH 3 (meters)\n');
 fprintf(fid,'type#\t  X_PSA(vtx1)\t  Y_PSA(vtx1)\t  Z_PSA(vtx1)\t  X_PSA(vtx2)\t  Y_PSA(vtx2)\t  Z_PSA(vtx2)\t  X_PSA(vtx3)\t  Y_PSA(vtx3)\t  Z_PSA(vtx3)\n');
 for i=1:n_segments    
@@ -806,7 +1234,8 @@ end;
 SensorLoc=zeros(24,2,3,n_segments);
 fprintf(fid,' \n');
 fprintf(fid,'------------------------------------------------------  SECTION 6: EDGE SENSORS ------------------------------------------------------------\n');
-fprintf(fid,'6A: MATING AND LOCATIONS OF EDGE SENSOR RELATIVE TO M1CRS and PSACRS (in meters)\n'); 
+fprintf(fid,'6A: MATING AND LOCATIONS OF EDGE SENSOR RELATIVE TO M1CRS and PSACRS (in meters) (LOCATION OF TYPICAL POINT P8 ON TMT.M1.M1CS-INT-001)\n');
+fprintf(fid,'Note: ES1, ES3, ES5, ES7, ES9, ES11 are "sense" side, and ES2, ES4, ES6, ES8, ES10, ES12 are "drive" side.\n');
 fprintf(fid,'Current Edge Sensor      Mating Edge Sensor       Coordinates of Current Edge Sensor\n');
 fprintf(fid,'   ES#   Seg  Sens        ES#   Seg   Sens\t         X_M1\t         Y_M1\t         Z_M1\t        X_PSA\t        Y_PSA\t        Z_PSA\n');
 for j=1:6 % loop on sector
@@ -852,25 +1281,49 @@ for i=1:n_segments  % loop on segments
     end;
 end;
 fprintf(fid,' \n');
-fprintf(fid,'-----------------------------------------------  SECTION 7: CELL-PSA INTERFACE NODES -------------------------------------------------------\n');
-fprintf(fid,'Location of Cell to PSA interface nodes, expressed in the M1 Coordinate System\n'); 
-fprintf(fid,'These points are the geometric centers of the bolt patterns designed to receive the PSA support posts\n');
-fprintf(fid,'The faces in which the threaded hole patterns are machined are to be nominally orthogonal to the 1Z_PSA unit vector for the corresponding segment number, as listed in Section 2B\n');
-fprintf(fid,'Locations and orientations in other sectors are obtained by rotating the data about the global Z_M1 axis, by +60 degrees from each sector to the next\n');
-fprintf(fid,'Locations of AAP nodes in PSA system:\n');
-fprintf(fid,'     Angles = %6.1f, %6.1f, %6.1f degrees\n',CellInterface_Angles);
-fprintf(fid,'     Radius = %9.6f m\n',CellInterface_Radius);
-fprintf(fid,'     Elevation = %9.6f m\n',CellInterface_Z);
-fprintf(fid,' \n');
-fprintf(fid,'LOCATIONS OF CELL TO PSA INTERFACE NODES, IN M1 COORDINATE SYSTEM XYZ_M1 (meters)\n');
-fprintf(fid,'seg#\t  X_M1(intf1)\t  Y_M1(intf1)\t  Z_M1(intf1)\t  X_M1(intf2)\t  Y_M1(intf2)\t  Z_M1(intf2)\t  X_M1(intf3)\t  Y_M1(intf3)\t  Z_M1(intf3)\n');
-for j=1:6 % loop on sector number
-    for i=1:n_segments
-        fprintf(fid,' %c%-2i\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\n',SectorID(j),i,CellInterface_M1(:,:,i+(j-1)*n_segments));
+fprintf(fid,'6C: ORIGIN OF EDGE SENSOR POCKET COORDINATE SYSTEM (ESPCRS, AS SHOWN ON POLISHED SEGMENT DRAWING M1S-001-01000) IN PSACRS\n'); 
+fprintf(fid,'Edge sensor pocket center (origin of ESPCRS) is located at coordinates [%13.9f, +/-%13.9f,%13.9f] relative to the corresponding ESCRS coordinate system\n',ESPOrigin_ESCRS); 
+fprintf(fid,'type# Sens\t  X_PSA\t  Y_PSA\t  Z_PSA\n');
+for i=1:n_segments  % loop on segments
+    for k=1:12  % loop on edge sensors  
+        fprintf(fid,'%2i\t%2i\t%13.9f\t%13.9f\t%13.9f\n',i,k,ESPOrigin_PSA(:,i,k));
     end;
 end;
 fprintf(fid,' \n');
-fprintf(fid,'----------------------------------------------------  SECTION 8: ACTUATOR DATA -------------------------------------------------------------\n');
+
+fprintf(fid,'----------------------------------------  SECTION 7: CELL-SIDE AAP FLANGE CENTER INTERFACE NODES -------------------------------------------\n');
+fprintf(fid,'Location of Cell-Side Cell to PSA interface nodes, expressed in the M1 Coordinate System\n'); 
+fprintf(fid,'These points are the theoretical geometric centers of the AAP post mounting flanges which are part of the top chord trusses.\n');
+fprintf(fid,'Notes: - top chord truss plates are now assumed to be nominally parallel to Z_PSA for each segment\n');
+fprintf(fid,'       - centerline of top chord members assumed to nominally span exactly between cell top chord nodes (whose coordinates are listed in the next section)\n');
+fprintf(fid,'Distance from centerline of top chord member to AAP face = %9.6f m\n',abs(dZTopChordToAAPFace));
+fprintf(fid,' \n');
+fprintf(fid,'LOCATIONS OF CELL-SIDE AAP FLANGE CENTERS, IN M1 COORDINATE SYSTEM XYZ_M1 (meters)\n');
+fprintf(fid,'seg#\t  X_M1(intf1)\t  Y_M1(intf1)\t  Z_M1(intf1)\t  X_M1(intf2)\t  Y_M1(intf2)\t  Z_M1(intf2)\t  X_M1(intf3)\t  Y_M1(intf3)\t  Z_M1(intf3)\n');
+for j=1:6 % loop on sector number
+    for i=1:n_segments
+        fprintf(fid,' %c%-2i\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\n',SectorID(j),i,CellSideAAPFace_M1(:,:,i+(j-1)*n_segments));
+    end;
+end;
+fprintf(fid,' \n');
+
+fprintf(fid,'----------------------------------------------------  SECTION 8: CELL TOP CHORD NODES ------------------------------------------------------\n');
+fprintf(fid,'Location of the nodes of the CL of the top chord of the M1 cell, expressed in the M1 Coordinate System\n'); 
+fprintf(fid,'These points are located along the normals to the M1 optical surface at the ungapped vertices, at a distance %9.6f m from the optical surface.\n',dNormalM1OSToCellNode);
+fprintf(fid,' \n');
+fprintf(fid,'LOCATIONS OF CELL TOP CHORD NODES, EXPRESSED IN M1 COORDINATE SYSTEM (meters)\n');
+fprintf(fid,'(note that 3 cell nodes are listed for each segment; since most cell nodes are shared by three segments, most cell nodes are listed three times)\n');
+fprintf(fid,'(listed as nodes 1, 2, 3, corresponding to vertex numbers 1,3,5 for each segment)\n');
+fprintf(fid,'seg#\t   X_M1(nde1)\t   Y_M1(nde1)\t   Z_M1(nde1)\t   X_M1(nde2)\t   Y_M1(nde2)\t   Z_M1(nde2)\t   X_M1(nde3)\t   Y_M1(nde3)\t   Z_M1(nde3)\n');
+for j=1:6 % loop on sector number
+    for i=1:n_segments
+        fprintf(fid,' %c%-2i\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\n',SectorID(j),i,CellNode_M1(:,1:3,i+(j-1)*n_segments));
+    end;
+end;
+fprintf(fid,' \n');
+fprintf(fid,' \n');
+
+fprintf(fid,'----------------------------------------------------  SECTION 9: ACTUATOR DATA -------------------------------------------------------------\n');
 fprintf(fid,'Locations of actuator origins in PSA system:\n');
 fprintf(fid,'     Angles = %6.1f, %6.1f, %6.1f degrees\n',ActOrigin_Angles);
 fprintf(fid,'     Radius = %9.6f m\n',ActOrigin_Radius);
@@ -883,7 +1336,7 @@ for k=1:3 % loop on 3 actuators
     fprintf(fid,'     Actuator %1i: %9.6f, %9.6f, %9.6f\n',k,ActOS_PSA(:,k));
 end;
 fprintf(fid,' \n');
-fprintf(fid,'8A: LOCATIONS OF CENTERS OF SEGMENT ROTATION, IN M1 COORDINATE SYSTEM XYZ_M1 (meters)\n');
+fprintf(fid,'9A: LOCATIONS OF CENTERS OF SEGMENT ROTATION, IN M1 COORDINATE SYSTEM XYZ_M1 (meters) (assumed to be the mid-plane of the SSA Lateral Guide Flexure)\n');
 fprintf(fid,'seg#\t    X_M1(COR)\t    Y_M1(COR)\t    Z_M1(COR)\n');
 for j=1:6 % loop on sector number
     for i=1:n_segments
@@ -891,7 +1344,7 @@ for j=1:6 % loop on sector number
     end;
 end;
 fprintf(fid,' \n');
-fprintf(fid,'8B: LOCATIONS OF ACTUATOR CRS ORIGINS, IN M1 COORDINATE SYSTEM XYZ_M1 (meters)\n');
+fprintf(fid,'9B: LOCATIONS OF ACTUATOR CRS ORIGINS, IN M1 COORDINATE SYSTEM XYZ_M1 (meters)\n');
 fprintf(fid,'seg#\t   X_M1(act1)\t   Y_M1(act1)\t   Z_M1(act1)\t   X_M1(act2)\t   Y_M1(act2)\t   Z_M1(act2)\t   X_M1(act3)\t   Y_M1(act3)\t   Z_M1(act3)\n');
 for j=1:6 % loop on sector number
     for i=1:n_segments
@@ -899,7 +1352,7 @@ for j=1:6 % loop on sector number
     end;
 end;
 fprintf(fid,' \n');
-fprintf(fid,'8C: COMPONENTS OF ACTUATOR LINES OF ACTION, IN M1 COORDINATE SYSTEM XYZ_M1\n');
+fprintf(fid,'9C: COMPONENTS OF ACTUATOR LINES OF ACTION, IN M1 COORDINATE SYSTEM XYZ_M1\n');
 fprintf(fid,'seg#\t  1X_M1(LOA1)\t  1Y_M1(LOA1)\t  1Z_M1(LOA1)\t  1X_M1(LOA2)\t  1Y_M1(LOA2)\t  1Z_M1(LOA2)\t  1X_M1(LOA3)\t  1Y_M1(LOA3)\t  1Z_M1(LOA3)\n');
 for j=1:6 % loop on sector number
     for i=1:n_segments
@@ -907,18 +1360,137 @@ for j=1:6 % loop on sector number
     end;
 end;
 fprintf(fid,' \n');
-fprintf(fid,'-----------------------------------------------  SECTION 9: SEGMENT TOOLING FIDUCIALS ------------------------------------------------------\n');
-fprintf(fid,'Locations of tooling fiducials in PSA system:\n');
-fprintf(fid,'     Angles = %6.1f, %6.1f, %6.1f degrees\n',Fiducial_Angles);
-fprintf(fid,'     Radius = %9.6f m\n',Fiducial_Radius);
-fprintf(fid,'LOCATIONS OF SEGMENT FIDUCIALS, IN LOCAL PSA COORDINATE SYSTEMS (meters)\n');
+fprintf(fid,'-----------------------------------------------  SECTION 10: FIDUCIALS AND TARGETS ------------------------------------------------------\n');
+fprintf(fid,' \n');
+fprintf(fid,'10A: OPTICAL SURFACE FIDUCIALS\n');
+fprintf(fid,'Locations of optical surface fiducials in PSA system:\n');
+fprintf(fid,'     Angles = %6.1f, %6.1f, %6.1f degrees\n',OSFiducials_Angles);
+fprintf(fid,'     Radius = %9.6f m\n',OSFiducials_Radius);
+fprintf(fid,'\n');
+fprintf(fid,'10A1: LOCATIONS OF OPTICAL SURFACE FIDUCIALS, IN LOCAL PSA COORDINATE SYSTEMS (meters)\n');
 fprintf(fid,'type#\t  X_PSA(fdc1)\t  Y_PSA(fdc1)\t  Z_PSA(fdc1)\t  X_PSA(fdc2)\t  Y_PSA(fdc2)\t  Z_PSA(fdc2)\t  X_PSA(fdc3)\t  Y_PSA(fdc3)\t  Z_PSA(fdc3)\n');
 for i=1:n_segments    
-    fprintf(fid,'%3i\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\n',i,Fiducial_PSA(1,1,i),Fiducial_PSA(2,1,i),Fiducial_PSA(3,1,i),Fiducial_PSA(1,2,i),Fiducial_PSA(2,2,i),Fiducial_PSA(3,2,i),Fiducial_PSA(1,3,i),Fiducial_PSA(2,3,i),Fiducial_PSA(3,3,i));
+    fprintf(fid,'%3i\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\n',i,OSFiducials_PSA(1,1,i),OSFiducials_PSA(2,1,i),OSFiducials_PSA(3,1,i),OSFiducials_PSA(1,2,i),OSFiducials_PSA(2,2,i),OSFiducials_PSA(3,2,i),OSFiducials_PSA(1,3,i),OSFiducials_PSA(2,3,i),OSFiducials_PSA(3,3,i));
+end;
+fprintf(fid,'\n');
+fprintf(fid,'10A2: LOCATIONS OF OPTICAL SURFACE FIDUCIALS, IN M1CRS COORDINATE SYSTEMS (meters)\n');
+fprintf(fid,'seg#\t   X_M1(fdc1)\t   Y_M1(fdc1)\t   Z_M1(fdc1)\t   X_M1(fdc2)\t   Y_M1(fdc2)\t   Z_M1(fdc2)\t   X_M1(fdc3)\t   Y_M1(fdc3)\t   Z_M1(fdc3)\n');
+for j=1:6 % loop on sector number
+    for i=1:n_segments
+        k=i+(j-1)*n_segments;
+        fprintf(fid,' %c%-2i\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\n',SectorID(j),i,OSFiducials_M1(1,1,k),OSFiducials_M1(2,1,k),OSFiducials_M1(3,1,k),OSFiducials_M1(1,2,k),OSFiducials_M1(2,2,k),OSFiducials_M1(3,2,k),OSFiducials_M1(1,3,k),OSFiducials_M1(2,3,k),OSFiducials_M1(3,3,k));
+    end;
+end;
+fprintf(fid,' \n');
+fprintf(fid,'10B: OPTICAL SURFACE PROBE SET1 LOCATIONS\n');
+fprintf(fid,'Locations of optical surface probe SET1 locations in PSA system:\n');
+fprintf(fid,'     Angles = %6.1f, %6.1f, %6.1f degrees\n',OSProbes1_Angles);
+fprintf(fid,'     Radius = %9.6f m\n',OSProbes1_Radius);
+fprintf(fid,'\n');
+fprintf(fid,'10B1: LOCATIONS OF OPTICAL SURFACE PROBE SET1 POINTS (S1p), IN LOCAL PSA COORDINATE SYSTEMS (meters)\n');
+fprintf(fid,'type#\t  X_PSA(S1p1)\t  Y_PSA(S1p1)\t  Z_PSA(S1p1)\t  X_PSA(S1p2)\t  Y_PSA(S1p2)\t  Z_PSA(S1p2)\t  X_PSA(S1p3)\t  Y_PSA(S1p3)\t  Z_PSA(S1p3)\n');
+for i=1:n_segments    
+    fprintf(fid,'%3i\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\n',i,OSProbes1_PSA(1,1,i),OSProbes1_PSA(2,1,i),OSProbes1_PSA(3,1,i),OSProbes1_PSA(1,2,i),OSProbes1_PSA(2,2,i),OSProbes1_PSA(3,2,i),OSProbes1_PSA(1,3,i),OSProbes1_PSA(2,3,i),OSProbes1_PSA(3,3,i));
+end;
+fprintf(fid,'\n');
+fprintf(fid,'10B2: LOCATIONS OF OPTICAL SURFACE PROBE SET1 POINTS (S1p), IN M1CRS COORDINATE SYSTEMS (meters)\n');
+fprintf(fid,'seg#\t   X_M1(S1p1)\t   Y_M1(S1p1)\t   Z_M1(S1p1)\t   X_M1(S1p2)\t   Y_M1(S1p2)\t   Z_M1(S1p2)\t   X_M1(S1p3)\t   Y_M1(S1p3)\t   Z_M1(S1p3)\n');
+for j=1:6 % loop on sector number
+    for i=1:n_segments    
+        k=i+(j-1)*n_segments;
+        fprintf(fid,'% c%-2i\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\n',SectorID(j),i,OSProbes1_M1(1,1,k),OSProbes1_M1(2,1,k),OSProbes1_M1(3,1,k),OSProbes1_M1(1,2,k),OSProbes1_M1(2,2,k),OSProbes1_M1(3,2,k),OSProbes1_M1(1,3,k),OSProbes1_M1(2,3,k),OSProbes1_M1(3,3,k));
+    end;
 end;
 
-fclose(fid);
+
+fprintf(fid,' \n');
+fprintf(fid,'10C: OPTICAL SURFACE PROBE SET2 LOCATIONS\n');
+fprintf(fid,'Locations of optical surface probe SET2 locations in PSA system:\n');
+fprintf(fid,'     Angles = %6.1f, %6.1f, %6.1f degrees\n',OSProbes2_Angles);
+fprintf(fid,'     Radius = %9.6f m\n',OSProbes2_Radius);
+fprintf(fid,'\n');
+fprintf(fid,'10C1: LOCATIONS OF OPTICAL SURFACE PROBE SET2 POINTS (S2p), IN LOCAL PSA COORDINATE SYSTEMS (meters)\n');
+fprintf(fid,'type#\t  X_PSA(S2p1)\t  Y_PSA(S2p1)\t  Z_PSA(S2p1)\t  X_PSA(S2p2)\t  Y_PSA(S2p2)\t  Z_PSA(S2p2)\t  X_PSA(S2p3)\t  Y_PSA(S2p3)\t  Z_PSA(S2p3)\n');
+for i=1:n_segments    
+    fprintf(fid,'%3i\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\n',i,OSProbes2_PSA(1,1,i),OSProbes2_PSA(2,1,i),OSProbes2_PSA(3,1,i),OSProbes2_PSA(1,2,i),OSProbes2_PSA(2,2,i),OSProbes2_PSA(3,2,i),OSProbes2_PSA(1,3,i),OSProbes2_PSA(2,3,i),OSProbes2_PSA(3,3,i));
+end;
+fprintf(fid,'\n');
+fprintf(fid,'10C2: LOCATIONS OF OPTICAL SURFACE PROBE SET2 POINTS, IN M1CRS COORDINATE SYSTEMS (meters)\n');
+fprintf(fid,'seg#\t   X_M1(S2p1)\t   Y_M1(S2p1)\t   Z_M1(S2p1)\t   X_M1(S2p2)\t   Y_M1(S2p2)\t   Z_M1(S2p2)\t   X_M1(S2p3)\t   Y_M1(S2p3)\t   Z_M1(S2p3)\n');
+for j=1:6 % loop on sector number
+    for i=1:n_segments    
+        k=i+(j-1)*n_segments;
+        fprintf(fid,'% c%-2i\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\n',SectorID(j),i,OSProbes2_M1(1,1,k),OSProbes2_M1(2,1,k),OSProbes2_M1(3,1,k),OSProbes2_M1(1,2,k),OSProbes2_M1(2,2,k),OSProbes2_M1(3,2,k),OSProbes2_M1(1,3,k),OSProbes2_M1(2,3,k),OSProbes2_M1(3,3,k));
+    end;
+end;
+
+
+fprintf(fid,' \n');
+fprintf(fid,'10D: SUBCELL ALIGNMENT TARGETS\n');
+fprintf(fid,'Locations of subcell alignment targets in PSA system:\n');
+fprintf(fid,'     Angles = %6.1f, %6.1f, %6.1f degrees\n',SubcellAlignmentTargets_Angles);
+fprintf(fid,'     Elevations = %12.8f, %12.8f, %12.8f m\n',SubcellAlignmentTargets_Z);
+fprintf(fid,'     Radius = %9.6f m\n',SubcellAlignmentTargets_Radius);
+fprintf(fid,'\n');
+fprintf(fid,'10D1: LOCATIONS OF SUBCELL ALIGNMENT TARGETS, IN LOCAL PSA COORDINATE SYSTEMS (meters)\n');
+fprintf(fid,'type#\t  X_PSA(sat1)\t  Y_PSA(sat1)\t  Z_PSA(sat1)\t  X_PSA(sat2)\t  Y_PSA(sat2)\t  Z_PSA(sat2)\t  X_PSA(sat3)\t  Y_PSA(sat3)\t  Z_PSA(sat3)\n');
+for i=1:n_segments    
+    fprintf(fid,'%3i\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\n',i,SubcellAlignmentTargets_PSA(1,1,i),SubcellAlignmentTargets_PSA(2,1,i),SubcellAlignmentTargets_PSA(3,1,i),SubcellAlignmentTargets_PSA(1,2,i),SubcellAlignmentTargets_PSA(2,2,i),SubcellAlignmentTargets_PSA(3,2,i),SubcellAlignmentTargets_PSA(1,3,i),SubcellAlignmentTargets_PSA(2,3,i),SubcellAlignmentTargets_PSA(3,3,i));
+end;
+fprintf(fid,'\n');
+fprintf(fid,'10D2: LOCATIONS OF SUBCELL ALIGNMENT TARGETS, IN M1CRS COORDINATE SYSTEMS (meters)\n');
+fprintf(fid,'seg#\t   X_M1(sat1)\t   Y_M1(sat1)\t   Z_M1(sat1)\t   X_M1(sat2)\t   Y_M1(sat2)\t   Z_M1(sat2)\t   X_M1(sat3)\t   Y_M1(sat3)\t   Z_M1(sat3)\n');
+for j=1:6 % loop on sector number
+    for i=1:n_segments 
+        k=i+(j-1)*n_segments;
+        fprintf(fid,' %c%-2i\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\n',SectorID(j),i,SubcellAlignmentTargets_M1(1,1,k),SubcellAlignmentTargets_M1(2,1,k),SubcellAlignmentTargets_M1(3,1,k),SubcellAlignmentTargets_M1(1,2,k),SubcellAlignmentTargets_M1(2,2,k),SubcellAlignmentTargets_M1(3,2,k),SubcellAlignmentTargets_M1(1,3,k),SubcellAlignmentTargets_M1(2,3,k),SubcellAlignmentTargets_M1(3,3,k));
+    end;
+end;
+fprintf(fid,' \n');
+
+fprintf(fid,'-----------------------------------------------  SECTION 11: OFF-AXIS PRESCRIPTIONS -------------------------------------------------------\n');
+fprintf(fid,'NOTES: * all coefficients are listed in MICRONS\n');
+fprintf(fid,'       * all coefficients are calculated based on a nominal segment radius as listed below (in meters)\n');
+fprintf(fid,'       * the angle t (in degrees) is the angle measured in the plane XY_PSA from the X_PSA axis to the projection into XY_PSA of the R_M1 line from O_M1 to the projection of O_PSA in the XY_M1 plane\n');
+fprintf(fid,'       * Zernike coefficients are based on the 7 monomial coefficients listed below (i.e. a20, a22, a31, a33, a40, a42, and a44); all other monomial coefficients are assumed equal to zero\n');
+fprintf(fid,'       * Zernike coefficients are identified using the n,m notation, i.e. C20=focus, C22=astigmatism, C31=coma, C33=trefoil, C40=spherical aberration, C42=higher order astigmatism\n');
+fprintf(fid,'11A: CYLINDRICAL MONOMIAL COEFFICIENTS (microns)\n');
+fprintf(fid,'type#\t   radius (m)\t  t (degrees)\t          a20\t          a22\t          a31\t          a33\t          a40\t          a42\t          a44\t  \n');
+for i=1:n_segments    
+    fprintf(fid,'%3i\t%13.9f\t%13.9f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\n',i,prescriptionRadius(i), 180*(ToCenterAngle(i)+pi)/pi, 1e6*monomials(i).a20, 1e6*monomials(i).a22, 1e6*monomials(i).a31, 1e6*monomials(i).a33, 1e6*monomials(i).a40, 1e6*monomials(i).a42, 1e6*monomials(i).a44);
+end;
+fprintf(fid,'11B: BORN & WOLF ZERNIKE COEFFICIENTS (microns)\n');
+fprintf(fid,'type#\t   radius (m)\t  t (degrees)\t          C20\t          C22\t          C31\t          C33\t          C40\t          C42\t  \n');
+for i=1:n_segments    
+    fprintf(fid,'%3i\t%13.9f\t%13.9f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\n',i,prescriptionRadius(i), 180*(ToCenterAngle(i)+pi)/pi, 1e6*BWZernike(i).c20, 1e6*BWZernike(i).c22, 1e6*BWZernike(i).c31, 1e6*BWZernike(i).c33, 1e6*BWZernike(i).c40, 1e6*BWZernike(i).c42);
+end;
+fprintf(fid,'11C: NOLL ZERNIKE COEFFICIENTS (microns)\n');
+fprintf(fid,'type#\t   radius (m)\t  t (degrees)\t          C20\t          C22\t          C31\t          C33\t          C40\t          C42\t  \n');
+for i=1:n_segments    
+    fprintf(fid,'%3i\t%13.9f\t%13.9f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\n',i,prescriptionRadius(i), 180*(ToCenterAngle(i)+pi)/pi, 1e6*NollZernike(i).c20, 1e6*NollZernike(i).c22, 1e6*NollZernike(i).c31, 1e6*NollZernike(i).c33, 1e6*NollZernike(i).c40, 1e6*BWZernike(i).c42);
+end;
+fprintf(fid,'11D: BORN & WOLF ZERNIKE COEFFICIENTS ROTATED INTO THE PSACRS AXES (microns)\n');
+fprintf(fid,'type#\t   radius (m)\t          C20\t         C2+2\t         c2-2\t         C3+1\t         C3-1\t         C3+3\t         C3-3\t         C40\t         C4+2\t         C4-2\t \n');
+for i=1:n_segments    
+    fprintf(fid,'%3i\t%13.9f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\n',i,prescriptionRadius(i), 1e6*PSABWZernike(i).c20, 1e6*PSABWZernike(i).c22, 1e6*PSABWZernike(i).c2m2, 1e6*PSABWZernike(i).c31, 1e6*PSABWZernike(i).c3m1, 1e6*PSABWZernike(i).c33, 1e6*PSABWZernike(i).c3m3, 1e6*PSABWZernike(i).c40, 1e6*PSABWZernike(i).c42, 1e6*PSABWZernike(i).c4m2);
+end;
+fprintf(fid,' \n');
     
+
+fprintf(fid,'-------------------------------------------  SECTION 12: SEGMENT CLOCKING RELATIVE TO M1 --------------------------------------------------\n');
+fprintf(fid,'This section lists - for each segment type - the angle, measured about PSACRS_Z (or, in the PSACRS_XY plane), from the intersection between planes PSACRS_XY and M1CRS_RZ to PSACRS_X\n');
+fprintf(fid,'12A: CLOCKING OF SEGMENTS RELATIVE TO M1 RADIAL\n');
+fprintf(fid,'type#\t  t (degrees)\n');
+for i=1:n_segments    
+    fprintf(fid,'%3i\t%13.9f\n',i,180*AngleFromXtoM1RPlane_PSA(i)/pi);
+end;
+
+
+fprintf(fid,' \n');
+
+
+fclose(fid);
+
 %################################################### Components of 1g vector in PSA reference frame ####################################################
 dt=cputime-tstart;
 disp(['T=' num2str(dt) '  Calculating components of gravity vector in each PSACRS for various telescope zenith angles']);
@@ -940,7 +1512,7 @@ end
 nZenith=iTelZenith;
         
 fid=fopen('OneGComponents.txt','wt');
-fprintf(fid,'TMT M1 GRAVITY ORIENTATION DATA - Eric Ponslet - HYTEC Inc. - %s\n',datestr(now));
+fprintf(fid,'TMT M1 GRAVITY ORIENTATION DATA - Eric Ponslet - %s\n',datestr(now));
 for k=1:3  % loop on components in PSA
     fprintf(fid,'\nComponent # %1i in PSA\n',k);
     fprintf(fid,['seg\t         Z=0\t        Z=-5\t       Z=-10\t       Z=-15\t       Z=-20\t       Z=-25\t       Z=-30'...
@@ -955,6 +1527,49 @@ for k=1:3  % loop on components in PSA
 end;
 fclose(fid);
 
+
+%################################################################## CANON SECTION ####################################################################
+
+dt=cputime-tstart;
+disp(['T=' num2str(dt) '  Computing and outputing ZYZ Euler Angles of the PSA systems, relative to M1 (all angles in Radians)']);
+
+fid=fopen('EulerAngles.txt','wt');
+fprintf(fid,'TMT M1 PSA ZYZ EULER ANGLE DATA - Eric Ponslet - %s\n',datestr(now));
+fprintf(fid,'Seg    EulerA1(Z)   EulerA2(Y*)  EulerA3(Z**)     Theta         Phi\n');
+
+% loop on all segments in sector A
+for i=1:n_segments
+    
+    R=RPSA_M1(:,:,i);
+    
+    
+    
+    % compute ZYZ euler angles that express the PSA system in the M1 system; rotation matrix defining PSA is RPSA_M1
+    EulerAnglesPSA_M1(1,i)= atan2( -1.0*R(2,3), -1.0*R(1,3) );
+    EulerAnglesPSA_M1(3,i)= atan2( -1.0*R(3,2), R(3,1) );
+    EulerAnglesPSA_M1(2,i)= atan2( R(3,2)/sin(EulerAnglesPSA_M1(3,i)), R(3,3) );
+    
+    CanonPhi(i) = atan(dZdR(i));
+    CanonTheta(i) = Tctr_M1(i);
+    fprintf(fid,'%3i %13.9f %13.9f %13.9f   %13.9f %13.9f\n',i,EulerAnglesPSA_M1(1,i),EulerAnglesPSA_M1(2,i),EulerAnglesPSA_M1(3,i),CanonTheta(i),CanonPhi(i));
+end;
+
+max_rdAlphaGamma = max(abs( (EulerAnglesPSA_M1(1,:) + EulerAnglesPSA_M1(3,:) ) ./ EulerAnglesPSA_M1(1,:) ));
+max_rdAlphaTheta = max(abs( (EulerAnglesPSA_M1(1,:) - CanonTheta ) ./ CanonTheta ));
+max_rdBetaPhi =    max(abs( (EulerAnglesPSA_M1(2,:) + CanonPhi ) ./ CanonPhi ));
+
+fprintf(fid,'Max absolute relative difference between Alpha and -Gamma = %10.3e\n',max_rdAlphaGamma);
+fprintf(fid,'Max absolute relative difference between Alpha and Theta = %10.3e\n',max_rdAlphaTheta);
+fprintf(fid,'Max absolute relative difference between Beta and -Phi = %10.3e\n',max_rdBetaPhi);
+
+disp(['         max abs diff between Alpha&-Gamma, Alpha&Theta, and Beta&Phi = ' num2str(max_rdAlphaGamma) '   ' num2str(max_rdAlphaTheta) '   ' num2str(max_rdBetaPhi)]);
+
+fclose(fid);
+
+
+
+
+
 % end program if not plotting
 if ~GeneratePlots
     dt=cputime-tstart;
@@ -962,350 +1577,488 @@ if ~GeneratePlots
     return; 
 end;
 
+
+
+
 %############################################################### PLOT VARIOUS RESULTS ################################################################
 dt=cputime-tstart;
 disp(['T=' num2str(dt) '  Generating various plots of the results']);
 scrsz = get(0,'ScreenSize');
 
-% ----------------------------------------------------------------------------------------------------------------------------------------------------------------
-% 2D plot of array with segment numbers and extreme segments identified
-h=figure('Position',[50 50 scrsz(3)*2/3 scrsz(4)*2/3],'Name','2D M1 Array - Sector A - extreme segments','NumberTitle','off');
-axis([-(a+a/3) cos(30*pi/180)*RmaxBP+a/3 -a/3 RmaxBP+a/3]);
-axis('equal');
-for i=1:n_segments
+% 2D plot of a few segments, with position of ESPCRS origin
+for i=1:10
+    figure('Position',[50+i 50+i scrsz(3)*2/3 scrsz(4)*2/3],'Name',['2D PSA plot of segment ' num2str(i)],'NumberTitle','off');
     hold on;
-    plot(Center_M1(1,i),Center_M1(2,i),'.k');
-    plot([Vertex_M1(1,:,i) Vertex_M1(1,1,i)],[Vertex_M1(2,:,i) Vertex_M1(2,1,i)],'-k');
-    text(Center_M1(1,i)+0.1,Center_M1(2,i),num2str(i));
-end;
-hold on; i=iMinDiam;  d=0.9; h1=plot([d*Vertex_M1(1,:,i)+(1-d)*Center_M1(1,i) d*Vertex_M1(1,1,i)+(1-d)*Center_M1(1,i)],[[d*Vertex_M1(2,:,i)+(1-d)*Center_M1(2,i) d*Vertex_M1(2,1,i)+(1-d)*Center_M1(2,i)]],'--g','LineWidth',2);
-hold on; i=iMaxDiam;  d=0.9; h2=plot([d*Vertex_M1(1,:,i)+(1-d)*Center_M1(1,i) d*Vertex_M1(1,1,i)+(1-d)*Center_M1(1,i)],[[d*Vertex_M1(2,:,i)+(1-d)*Center_M1(2,i) d*Vertex_M1(2,1,i)+(1-d)*Center_M1(2,i)]],'-g','LineWidth',2);
-hold on; i=iMinArea;  d=0.8; h3=plot([d*Vertex_M1(1,:,i)+(1-d)*Center_M1(1,i) d*Vertex_M1(1,1,i)+(1-d)*Center_M1(1,i)],[[d*Vertex_M1(2,:,i)+(1-d)*Center_M1(2,i) d*Vertex_M1(2,1,i)+(1-d)*Center_M1(2,i)]],'--b','LineWidth',2);
-hold on; i=iMaxArea;  d=0.8; h4=plot([d*Vertex_M1(1,:,i)+(1-d)*Center_M1(1,i) d*Vertex_M1(1,1,i)+(1-d)*Center_M1(1,i)],[[d*Vertex_M1(2,:,i)+(1-d)*Center_M1(2,i) d*Vertex_M1(2,1,i)+(1-d)*Center_M1(2,i)]],'-b','LineWidth',2);
-hold on; i=iMinIrreg; d=0.7; h5=plot([d*Vertex_M1(1,:,i)+(1-d)*Center_M1(1,i) d*Vertex_M1(1,1,i)+(1-d)*Center_M1(1,i)],[[d*Vertex_M1(2,:,i)+(1-d)*Center_M1(2,i) d*Vertex_M1(2,1,i)+(1-d)*Center_M1(2,i)]],'--r','LineWidth',2);
-hold on; i=iMaxIrreg; d=0.7; h6=plot([d*Vertex_M1(1,:,i)+(1-d)*Center_M1(1,i) d*Vertex_M1(1,1,i)+(1-d)*Center_M1(1,i)],[[d*Vertex_M1(2,:,i)+(1-d)*Center_M1(2,i) d*Vertex_M1(2,1,i)+(1-d)*Center_M1(2,i)]],'-r','LineWidth',2);
-legend([h1 h2 h3 h4 h5 h6],'Min Circum. circle','Max Circum. circle','Min Area', 'Max Area','Min Irregularity','Max Irregularity');
-xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');
-title('Segment Outlines projected into XY_{M1} plane');
-% plot 0/60/120 lines
-for theta=pi/6:2*pi/6:4.01*pi/6
-    hold on;polar([theta theta],[0 RmaxBP],':k');
-end;
-saveas(h,'2D_SectorA_Extremes.fig');
-
-% ----------------------------------------------------------------------------------------------------------------------------------------------------------------
-% 2D plot of complete array with segment numbers, vertex numbers, and edge sensor numbers
-h=figure('Position',[60 60 scrsz(3)*2/3 scrsz(4)*2/3],'Name','2D M1 Array - All Sectors - with numbering','NumberTitle','off');
-axis([-1*(cos(30*pi/180)*RmaxBP+a/3) (cos(30*pi/180)*RmaxBP+a/3) -1*(RmaxBP+a/3) (RmaxBP+a/3)]);
-axis('equal');
-for i=1:6  % loop on 6 sectors
-    for j=1:n_segments  % loop on all segments
-        iseg=j+(i-1)*n_segments;  % generalized segment number
-        hold on;
-        if mod(i,2)==0  % for every other segment:
-            C=[1 1 1]*0.9;  % set color to gray
-        else
-            C=[1 0.8 0.8];  % set color to pale pink
-        end;
-        patch([Vertex_M1(1,:,iseg) Vertex_M1(1,1,iseg)],[Vertex_M1(2,:,iseg) Vertex_M1(2,1,iseg)],C);  % plot shaded segment with black edge
-        plot(Center_M1(1,iseg),Center_M1(2,iseg),'.k');  % place dot at centers of segments
-        ID=[SectorID(i) num2str(j)];  % segment number string
-        text(Center_M1(1,iseg)+0.1,Center_M1(2,iseg),ID);  % label segments
+    text(0,0,num2str(i));
+    plot([Vertex_PSA(1,:,i) Vertex_PSA(1,1,i)],[Vertex_PSA(2,:,i) Vertex_PSA(2,1,i)],'-k');
+    for k=1:12
+        plot(ESPOrigin_PSA(1,i,k),ESPOrigin_PSA(2,i,k),'*r');
     end;
-    if debug % label vertices and edge sensors for segments #1 and 2 only in each sector (labeling all results in unbearably slow plots), unless in debugging mode (much smaller array)
-        jm=n_segments; 
-    else
-        jm=2; 
-    end;
-    for j=1:jm 
-        iseg=j+(i-1)*n_segments;  % generalized segment number
-        d=0.15;
-        plot(Vertex_M1(1,:,iseg),Vertex_M1(2,:,iseg),'.b');  % place dots at vertices
-        text(Vertex_M1(1,:,iseg)-d*(Vertex_M1(1,:,iseg)-Center_M1(1,iseg)),Vertex_M1(2,:,iseg)-d*(Vertex_M1(2,:,iseg)-Center_M1(2,iseg)),num2str([1:6]'),...
-                 'HorizontalAlignment','Center','VerticalAlignment','Middle','Color','b');  % label vertices
-        for k=1:12  % loop on all edge sensors
-            dR=ESOrigin_M1(1:2,iseg,k)-Center_M1(1:2,iseg);  % radial vector from segment center to edge sensor
-            dR=dR/norm(dR);  % normalize to unit length
-            plot(ESOrigin_M1(1,iseg,k)-Gap/2*dR(1),ESOrigin_M1(2,iseg,k)-Gap/2*dR(2),'.g');  % place dots for edges sensor markers (locations of dots are NOT representative)
-            text(ESOrigin_M1(1,iseg,k)-(Gap/2+d*a)*dR(1),ESOrigin_M1(2,iseg,k)-(Gap/2+d*a)*dR(2),num2str(k),'HorizontalAlignment','Center','VerticalAlignment','Middle','Color','g');  % label edge sensors
-        end;
-    end;
+    axis('equal');
 end;
-xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');
-title('Segment Outlines projected into XY_{M1} plane - with segments (black), vertices (blue), and edge sensors (green) identified');
-% plot 0/60/120 lines
-for theta=pi/6:2*pi/6:4.01*pi/6
-    hold on;polar([theta theta],[0 RmaxBP],':k');
-end;
-saveas(h,'2D_AllSectors_Numbered.fig');
+
+% % ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+% % 2D plot of array with segment numbers and extreme segments identified
+% h=figure('Position',[50 50 scrsz(3)*2/3 scrsz(4)*2/3],'Name','2D M1 Array - Sector A - extreme segments','NumberTitle','off');
+% axis([-(a+a/3) cos(30*pi/180)*RmaxBP+a/3 -a/3 RmaxBP+a/3]);
+% axis('equal');
+% for i=1:n_segments
+%     hold on;
+%     plot(Center_M1(1,i),Center_M1(2,i),'.k');
+%     plot([Vertex_M1(1,:,i) Vertex_M1(1,1,i)],[Vertex_M1(2,:,i) Vertex_M1(2,1,i)],'-k');
+%     text(Center_M1(1,i)+0.1,Center_M1(2,i),num2str(i));
+% end;
+% hold on; i=iMinDiam;  d=0.9; h1=plot([d*Vertex_M1(1,:,i)+(1-d)*Center_M1(1,i) d*Vertex_M1(1,1,i)+(1-d)*Center_M1(1,i)],[[d*Vertex_M1(2,:,i)+(1-d)*Center_M1(2,i) d*Vertex_M1(2,1,i)+(1-d)*Center_M1(2,i)]],'--g','LineWidth',2);
+% hold on; i=iMaxDiam;  d=0.9; h2=plot([d*Vertex_M1(1,:,i)+(1-d)*Center_M1(1,i) d*Vertex_M1(1,1,i)+(1-d)*Center_M1(1,i)],[[d*Vertex_M1(2,:,i)+(1-d)*Center_M1(2,i) d*Vertex_M1(2,1,i)+(1-d)*Center_M1(2,i)]],'-g','LineWidth',2);
+% hold on; i=iMinArea;  d=0.8; h3=plot([d*Vertex_M1(1,:,i)+(1-d)*Center_M1(1,i) d*Vertex_M1(1,1,i)+(1-d)*Center_M1(1,i)],[[d*Vertex_M1(2,:,i)+(1-d)*Center_M1(2,i) d*Vertex_M1(2,1,i)+(1-d)*Center_M1(2,i)]],'--b','LineWidth',2);
+% hold on; i=iMaxArea;  d=0.8; h4=plot([d*Vertex_M1(1,:,i)+(1-d)*Center_M1(1,i) d*Vertex_M1(1,1,i)+(1-d)*Center_M1(1,i)],[[d*Vertex_M1(2,:,i)+(1-d)*Center_M1(2,i) d*Vertex_M1(2,1,i)+(1-d)*Center_M1(2,i)]],'-b','LineWidth',2);
+% hold on; i=iMinIrreg; d=0.7; h5=plot([d*Vertex_M1(1,:,i)+(1-d)*Center_M1(1,i) d*Vertex_M1(1,1,i)+(1-d)*Center_M1(1,i)],[[d*Vertex_M1(2,:,i)+(1-d)*Center_M1(2,i) d*Vertex_M1(2,1,i)+(1-d)*Center_M1(2,i)]],'--r','LineWidth',2);
+% hold on; i=iMaxIrreg; d=0.7; h6=plot([d*Vertex_M1(1,:,i)+(1-d)*Center_M1(1,i) d*Vertex_M1(1,1,i)+(1-d)*Center_M1(1,i)],[[d*Vertex_M1(2,:,i)+(1-d)*Center_M1(2,i) d*Vertex_M1(2,1,i)+(1-d)*Center_M1(2,i)]],'-r','LineWidth',2);
+% legend([h1 h2 h3 h4 h5 h6],'Min Circum. circle','Max Circum. circle','Min Area', 'Max Area','Min Irregularity','Max Irregularity');
+% xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');
+% title('Segment Outlines projected into XY_{M1} plane');
+% % plot 0/60/120 lines
+% for theta=pi/6:2*pi/6:4.01*pi/6
+%     hold on;polar([theta theta],[0 RmaxBP],':k');
+% end;
+% saveas(h,'2D_SectorA_Extremes.fig');
+% 
+% % ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+% % 2D plot of complete array with segment numbers, vertex numbers, and edge sensor numbers
+% h=figure('Position',[60 60 scrsz(3)*2/3 scrsz(4)*2/3],'Name','2D M1 Array - All Sectors - with numbering','NumberTitle','off');
+% axis([-1*(cos(30*pi/180)*RmaxBP+a/3) (cos(30*pi/180)*RmaxBP+a/3) -1*(RmaxBP+a/3) (RmaxBP+a/3)]);
+% axis('equal');
+% for i=1:6  % loop on 6 sectors
+%     for j=1:n_segments  % loop on all segments
+%         iseg=j+(i-1)*n_segments;  % generalized segment number
+%         hold on;
+%         if mod(i,2)==0  % for every other segment:
+%             C=[1 1 1]*0.9;  % set color to gray
+%         else
+%             C=[1 0.8 0.8];  % set color to pale pink
+%         end;
+%         patch([Vertex_M1(1,:,iseg) Vertex_M1(1,1,iseg)],[Vertex_M1(2,:,iseg) Vertex_M1(2,1,iseg)],C);  % plot shaded segment with black edge
+%         plot(Center_M1(1,iseg),Center_M1(2,iseg),'.k');  % place dot at centers of segments
+%         ID=[SectorID(i) num2str(j)];  % segment number string
+%         text(Center_M1(1,iseg)+0.1,Center_M1(2,iseg),ID);  % label segments
+%     end;
+%     if debugParameters % label vertices and edge sensors for segments #1 and 2 only in each sector (labeling all results in unbearably slow plots), unless in debugging mode (much smaller array)
+%         jm=n_segments; 
+%     else
+%         jm=2; 
+%     end;
+%     for j=1:jm 
+%         iseg=j+(i-1)*n_segments;  % generalized segment number
+%         d=0.15;
+%         plot(Vertex_M1(1,:,iseg),Vertex_M1(2,:,iseg),'.b');  % place dots at vertices
+%         text(Vertex_M1(1,:,iseg)-d*(Vertex_M1(1,:,iseg)-Center_M1(1,iseg)),Vertex_M1(2,:,iseg)-d*(Vertex_M1(2,:,iseg)-Center_M1(2,iseg)),num2str([1:6]'),...
+%                  'HorizontalAlignment','Center','VerticalAlignment','Middle','Color','b');  % label vertices
+%         for k=1:12  % loop on all edge sensors
+%             dR=ESOrigin_M1(1:2,iseg,k)-Center_M1(1:2,iseg);  % radial vector from segment center to edge sensor
+%             dR=dR/norm(dR);  % normalize to unit length
+%             plot(ESOrigin_M1(1,iseg,k)-Gap/2*dR(1),ESOrigin_M1(2,iseg,k)-Gap/2*dR(2),'.g');  % place dots for edges sensor markers (locations of dots are NOT representative)
+%             text(ESOrigin_M1(1,iseg,k)-(Gap/2+d*a)*dR(1),ESOrigin_M1(2,iseg,k)-(Gap/2+d*a)*dR(2),num2str(k),'HorizontalAlignment','Center','VerticalAlignment','Middle','Color','g');  % label edge sensors
+%         end;
+%     end;
+% end;
+% xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');
+% title('Segment Outlines projected into XY_{M1} plane - with segments (black), vertices (blue), and edge sensors (green) identified');
+% % plot 0/60/120 lines
+% for theta=pi/6:2*pi/6:4.01*pi/6
+%     hold on;polar([theta theta],[0 RmaxBP],':k');
+% end;
+% saveas(h,'2D_AllSectors_Numbered.fig');
+% 
+% % ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+% % 2D plot of array with BFRH statistics: clocking angle, irregularity, and radius color code and corresponding histograms
+% h=figure('Position',[70 70 scrsz(3)*2/3 scrsz(4)*2/3],'Name','Statistics: BFRH Clocking, Irregularity & Radius','NumberTitle','off');
+% subplot(231);
+%   %axis([-(a+a/3) cos(30*pi/180)*RmaxBP+a/3 -a/3 RmaxBP+a/3]);
+%   plot(0,0,'.k');
+%   for i=1:n_segments
+%       hold on;
+%       fill([Vertex_M1(1,:,i) Vertex_M1(1,1,i)],[Vertex_M1(2,:,i) Vertex_M1(2,1,i)],1000*Clocking(i));
+%   end;
+%   axis('equal');
+%   xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');
+%   title(': Dist. of Clocking Angles (mrad)');
+%   colorbar('vert');
+% subplot(234);
+%   hist(Clocking*1000,15);
+%   xlabel('Clocking Angle (mrad)');ylabel('count');
+%   title('Dist. of Clocking Angles (mrad)');
+% subplot(232);
+%   %axis([-(a+a/3) cos(30*pi/180)*RmaxBP+a/3 -a/3 RmaxBP+a/3]);
+%   plot(0,0,'.k');
+%   for i=1:n_segments
+%       hold on;
+%       fill([Vertex_M1(1,:,i) Vertex_M1(1,1,i)],[Vertex_M1(2,:,i) Vertex_M1(2,1,i)],1000*Irregularity(i));
+%   end;
+%   axis('equal');
+%   xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');
+%   title('Dist. of RMS Irregularity (mm)');
+%   colorbar('vert');
+% subplot(235);
+%   hist(Irregularity*1000,15);
+%   xlabel('RMS Irregularity (mm)');ylabel('count');
+%   title('Dist. of RMS Irregularity (mm)');
+% subplot(233);
+%   %axis([-(a+a/3) cos(30*pi/180)*RmaxBP+a/3 -a/3 RmaxBP+a/3]);
+%   plot(0,0,'.k');
+%   for i=1:n_segments
+%       hold on;
+%       fill([Vertex_M1(1,:,i) Vertex_M1(1,1,i)],[Vertex_M1(2,:,i) Vertex_M1(2,1,i)],Radius(i));
+%   end;
+%   axis('equal');
+%   xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');
+%   title('Dist. of Best Fit Radius (m)');
+%   colorbar('vert');
+% subplot(236);
+%   hist(Radius,15);
+%   xlabel('Best Fit Radius (m)');ylabel('count');
+%   title('Dist. of Best Fit Radius (m)');
+% saveas(h,'Stats_Clocking_Irregularity_Radius.fig');
+% 
+% % ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+% % 2D plot of array with area and circumscribed radius color code and corresponding histograms
+% h=figure('Position',[80 80 scrsz(3)*2/3 scrsz(4)*2/3],'Name','Statistics: Segment Area & Radius of Circumscribed Circle','NumberTitle','off');
+% subplot(221);
+%   %axis([-(a+a/3) cos(30*pi/180)*RmaxBP+a/3 -a/3 RmaxBP+a/3]);
+%   plot(0,0,'.k');
+%   for i=1:n_segments
+%       hold on;
+%       fill([Vertex_M1(1,:,i) Vertex_M1(1,1,i)],[Vertex_M1(2,:,i) Vertex_M1(2,1,i)],HexagonArea(i));
+%   end;
+%   axis('equal');
+%   xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');
+%   title('Dist. of Segment Area ({m^2})');
+%   colorbar('vert');
+% subplot(222);
+%   %axis([-(a+a/3) cos(30*pi/180)*RmaxBP+a/3 -a/3 RmaxBP+a/3]);
+%   plot(0,0,'.k');
+%   for i=1:n_segments
+%       hold on;
+%       fill([Vertex_M1(1,:,i) Vertex_M1(1,1,i)],[Vertex_M1(2,:,i) Vertex_M1(2,1,i)],CircumRadii(i));
+%   end;
+%   axis('equal');
+%   xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');
+%   title('Dist. of Radius of Circumscribed Circle (m)');
+%   colorbar('vert');
+% subplot(223);
+%   hist(HexagonArea,15);
+%   xlabel('Segment Area ({m^2})');ylabel('count');
+%   title('Dist. of Segment Area ({m^2})');
+% subplot(224);
+%   hist(CircumRadii,15);
+%   xlabel('Radius of Circumscribed Circle (m)');ylabel('count');
+%   title('Dist. of Radius of Circumscribed Circle (m)');
+% saveas(h,'Stats_Area_Circum.fig');
+% 
+% % ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+% % 3D plot of segment outlines and PSA and Edge sensor coordinate systems - sector A
+% h=figure('Position',[90 90 scrsz(3)*2/3 scrsz(4)*2/3],'Name','3D Array - Sector A - Gapped and Ungapped, with PSA and ES coordinate systems','NumberTitle','off');
+% hold off;
+% plot3(Center_M1(1,1:n_segments),Center_M1(2,1:n_segments),Center_M1(3,1:n_segments),'.k');
+% axis([-(a/2+a/3) cos(30*pi/180)*RmaxBP+a/3 -a/3 RmaxBP+a/3]);
+% axis('equal');
+% % plot segment outlines
+% for i=1:n_segments
+%     hold on;
+%     plot3([UngappedVertex_M1(1,:,i) UngappedVertex_M1(1,1,i)],[UngappedVertex_M1(2,:,i) UngappedVertex_M1(2,1,i)],[UngappedVertex_M1(3,:,i) UngappedVertex_M1(3,1,i)],':k');  % plot sector A, ungapped contours
+%     plot3([Vertex_M1(1,:,i) Vertex_M1(1,1,i)],[Vertex_M1(2,:,i) Vertex_M1(2,1,i)],[Vertex_M1(3,:,i) Vertex_M1(3,1,i)],'k');  % plot sector A, gapped contours
+%     plot3([VertexOpt_M1(1,:,i) VertexOpt_M1(1,1,i)],[VertexOpt_M1(2,:,i) VertexOpt_M1(2,1,i)],[VertexOpt_M1(3,:,i) VertexOpt_M1(3,1,i)],'--k');  % plot sector A, chamfered contours
+% end;
+% % plot PSA coordinate systems
+% PSAaxis=0.3*a;
+% for i=1:n_segments
+%     for k=1:3  % loop on three axes of PSA coordinate system
+%         plot3([Center_M1(1,i) Center_M1(1,i)+PSAaxis*RPSA_M1(1,k,i)],[Center_M1(2,i) Center_M1(2,i)+PSAaxis*RPSA_M1(2,k,i)],[Center_M1(3,i) Center_M1(3,i)+PSAaxis*RPSA_M1(3,k,i)],'b');
+%     end;
+% 
+% end;
+% % plot edge sensor coordinate systems
+% ESaxis=0.3*a;
+% for i=1:n_segments
+%     for j=1:12  % loop on all edge sensors of segment 'i'
+%         plot3(ESOrigin_M1(1,i,j),ESOrigin_M1(2,i,j),ESOrigin_M1(3,i,j),'.g');  % center of ES coordinate system
+%         for k=1:3  % loop on three axes of ES coordinate system
+%             plot3([ESOrigin_M1(1,i,j) ESOrigin_M1(1,i,j)+ESaxis*RES_M1(1,k,i,j)],[ESOrigin_M1(2,i,j) ESOrigin_M1(2,i,j)+ESaxis*RES_M1(2,k,i,j)],[ESOrigin_M1(3,i,j) ESOrigin_M1(3,i,j)+ESaxis*RES_M1(3,k,i,j)],'g');
+%         end;
+%     end;
+% end;
+% % plot the origins of the edge sensor pocket coordinate systems
+% for i=1:n_segments
+%     for j=1:12  % loop on all edge sensors of segment 'i'
+%         plot3(ESPOrigin_M1(1,i,j),ESPOrigin_M1(2,i,j),ESPOrigin_M1(3,i,j),'.r');  % center of ES coordinate system
+%     end;
+% end;
+% 
+% % plot M1CRS Coordinate system
+% LM1CRS=0.8*a;
+% LM1CRStxt=0.9*a;
+% plot3(0,0,0,'.k');  % center of M1CRS
+% plot3([0 LM1CRS],[0 0],[0 0],'-k');  % X axis of M1CRS
+% text(LM1CRStxt,0,0,'X','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
+% plot3([0 0],[0 LM1CRS],[0 0],'-k');  % Y axis of M1CRS
+% text(0,LM1CRStxt,0,'Y','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
+% plot3([0 0],[0 0],[0 LM1CRS],'-k');  % Z axis of M1CRS
+% text(0,0,LM1CRStxt,'Z','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
+% 
+% xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');zlabel('Z_{M1} (m)');
+% title('Segment Outlines in XYZ_{M1} (black; dotted=ungapped, solid=gapped, dashed=chamfered), PSACRS (blue), and ESCRS (green)');
+% saveas(h,'3D_SectorA_PSA_ES.fig');
+% 
+% 
+% % ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+% % 3D plot of segment outlines and all fiducials and targets - sector A
+% h=figure('Position',[90 90 scrsz(3)*2/3 scrsz(4)*2/3],'Name','3D Array - Sector A - Optical surface fiducials, probe points, and subcell alignment targets','NumberTitle','off');
+% hold off;
+% plot3(Center_M1(1,1:n_segments),Center_M1(2,1:n_segments),Center_M1(3,1:n_segments),'.k');
+% axis([-(a/2+a/3) cos(30*pi/180)*RmaxBP+a/3 -a/3 RmaxBP+a/3]);
+% axis('equal');
+% % plot segment outlines
+% for i=1:n_segments
+%     hold on;
+%     plot3([Vertex_M1(1,:,i) Vertex_M1(1,1,i)],[Vertex_M1(2,:,i) Vertex_M1(2,1,i)],[Vertex_M1(3,:,i) Vertex_M1(3,1,i)],'k');  % plot sector A, gapped contours
+% end;
+% % plot the optical surface fiducials
+% for i=1:n_segments
+%     for j=1:3  % loop on three fiducials
+%         plot3(OSFiducials_M1(1,j,i),OSFiducials_M1(2,j,i),OSFiducials_M1(3,j,i),'.r');  % center of ES coordinate system
+%     end;
+% end;
+% % plot the optical surface probe points
+% for i=1:n_segments
+%     for j=1:3  % loop on three fiducials
+%         plot3(OSProbes_M1(1,j,i),OSProbes_M1(2,j,i),OSProbes_M1(3,j,i),'.b');  % center of ES coordinate system
+%     end;
+% end;
+% % plot the subcell alignment targets
+% for i=1:n_segments
+%     for j=1:3  % loop on three fiducials
+%         plot3(SubcellAlignmentTargets_M1(1,j,i),SubcellAlignmentTargets_M1(2,j,i),SubcellAlignmentTargets_M1(3,j,i),'.g');  % center of ES coordinate system
+%     end;
+% end;
+% 
+% % plot M1CRS Coordinate system
+% LM1CRS=0.8*a;
+% LM1CRStxt=0.9*a;
+% plot3(0,0,0,'.k');  % center of M1CRS
+% plot3([0 LM1CRS],[0 0],[0 0],'-k');  % X axis of M1CRS
+% text(LM1CRStxt,0,0,'X','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
+% plot3([0 0],[0 LM1CRS],[0 0],'-k');  % Y axis of M1CRS
+% text(0,LM1CRStxt,0,'Y','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
+% plot3([0 0],[0 0],[0 LM1CRS],'-k');  % Z axis of M1CRS
+% text(0,0,LM1CRStxt,'Z','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
+% 
+% xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');zlabel('Z_{M1} (m)');
+% title('Fiducials and Targets (Optical Surface Fiducials (red), Optical Surface Probe Points (blue), Subcell Alignment Targets (green)');
+% saveas(h,'3D_SectorA_Fiducials.fig');
+
+
 
 % ----------------------------------------------------------------------------------------------------------------------------------------------------------------
-% 2D plot of array with BFRH statistics: clocking angle, irregularity, and radius color code and corresponding histograms
-h=figure('Position',[70 70 scrsz(3)*2/3 scrsz(4)*2/3],'Name','Statistics: BFRH Clocking, Irregularity & Radius','NumberTitle','off');
-subplot(231);
-  %axis([-(a+a/3) cos(30*pi/180)*RmaxBP+a/3 -a/3 RmaxBP+a/3]);
-  plot(0,0,'.k');
-  for i=1:n_segments
-      hold on;
-      fill([Vertex_M1(1,:,i) Vertex_M1(1,1,i)],[Vertex_M1(2,:,i) Vertex_M1(2,1,i)],1000*Clocking(i));
-  end;
-  axis('equal');
-  xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');
-  title(': Dist. of Clocking Angles (mrad)');
-  colorbar('vert');
-subplot(234);
-  hist(Clocking*1000,15);
-  xlabel('Clocking Angle (mrad)');ylabel('count');
-  title('Dist. of Clocking Angles (mrad)');
-subplot(232);
-  %axis([-(a+a/3) cos(30*pi/180)*RmaxBP+a/3 -a/3 RmaxBP+a/3]);
-  plot(0,0,'.k');
-  for i=1:n_segments
-      hold on;
-      fill([Vertex_M1(1,:,i) Vertex_M1(1,1,i)],[Vertex_M1(2,:,i) Vertex_M1(2,1,i)],1000*Irregularity(i));
-  end;
-  axis('equal');
-  xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');
-  title('Dist. of RMS Irregularity (mm)');
-  colorbar('vert');
-subplot(235);
-  hist(Irregularity*1000,15);
-  xlabel('RMS Irregularity (mm)');ylabel('count');
-  title('Dist. of RMS Irregularity (mm)');
-subplot(233);
-  %axis([-(a+a/3) cos(30*pi/180)*RmaxBP+a/3 -a/3 RmaxBP+a/3]);
-  plot(0,0,'.k');
-  for i=1:n_segments
-      hold on;
-      fill([Vertex_M1(1,:,i) Vertex_M1(1,1,i)],[Vertex_M1(2,:,i) Vertex_M1(2,1,i)],Radius(i));
-  end;
-  axis('equal');
-  xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');
-  title('Dist. of Best Fit Radius (m)');
-  colorbar('vert');
-subplot(236);
-  hist(Radius,15);
-  xlabel('Best Fit Radius (m)');ylabel('count');
-  title('Dist. of Best Fit Radius (m)');
-saveas(h,'Stats_Clocking_Irregularity_Radius.fig');
+% % 3D plot of entire array with supports and actuators  and supports shown
+% h=figure('Position',[100 100 scrsz(3)*2/3 scrsz(4)*2/3],'Name','3D Array - Complete - Gapped, with cell-PSA interfaces','NumberTitle','off');
+% hold off
+% % % plot segment centers
+% % plot3(Center_M1(1,:),Center_M1(2,:),Center_M1(3,:),'.k');
+% axis([-1*ceil(cos(30*pi/180)*RmaxBP*1.1) ceil(cos(30*pi/180)*RmaxBP*1.1) -1*ceil(RmaxBP*1.1) ceil(RmaxBP*1.1)]);
+% axis equal;
+% % ActL=0.4*a;  % length of line segments to represent actuators lines of action
+% for j=1:6  % loop on 6 sectors
+%     for i=1:n_segments
+%         hold on;
+%         iseg=i+(j-1)*n_segments;
+%         % plot segment outlines
+%         if rem(j,2)>0
+%             plot3([Vertex_M1(1,:,iseg) Vertex_M1(1,1,iseg)],[Vertex_M1(2,:,iseg) Vertex_M1(2,1,iseg)],[Vertex_M1(3,:,iseg) Vertex_M1(3,1,iseg)],'k');  % plot segment
+%         else
+%             plot3([Vertex_M1(1,:,iseg) Vertex_M1(1,1,iseg)],[Vertex_M1(2,:,iseg) Vertex_M1(2,1,iseg)],[Vertex_M1(3,:,iseg) Vertex_M1(3,1,iseg)],':k');  % plot segment
+%         end
+%         
+%         hold on;
+%         % plot SSA supports
+%         CIcenter_M1=1/3*(PSASideAAPCenter_M1(:,1,iseg)+PSASideAAPCenter_M1(:,2,iseg)+PSASideAAPCenter_M1(:,3,iseg)); % center (mean) of cell interface points (for display only)
+%         for k=1:3
+% %             plot3(PSASideAAPCenter_M1(1,k,iseg),PSASideAAPCenter_M1(2,k,iseg),PSASideAAPCenter_M1(3,k,iseg),'.b');
+%             if k==1
+%                 style = '-b';
+%             else
+%                 style = ':b';
+%             end;
+%             plot3([CIcenter_M1(1) PSASideAAPCenter_M1(1,k,iseg)],[CIcenter_M1(2) PSASideAAPCenter_M1(2,k,iseg)],[CIcenter_M1(3) PSASideAAPCenter_M1(3,k,iseg)],style); % plot lines connecting each of the 3 cell interface points to the mean of those three points (for ease of visualization)
+%         end;
+%         % plot actuators
+% %         plot3(ActCOR_M1(1,iseg),ActCOR_M1(2,iseg),ActCOR_M1(3,iseg),'.b');  % center of rotation
+% %         for k=1:3
+% %             plot3(ActOrigin_M1(1,k,iseg),ActOrigin_M1(2,k,iseg),ActOrigin_M1(3,k,iseg),'.b');  % ACTCRS origin
+% %             plot3([ActOrigin_M1(1,k,iseg) ActOrigin_M1(1,k,iseg)+ActL*ActLOA_M1(1,k,iseg)],...
+% %                   [ActOrigin_M1(2,k,iseg) ActOrigin_M1(2,k,iseg)+ActL*ActLOA_M1(2,k,iseg)],...
+% %                   [ActOrigin_M1(3,k,iseg) ActOrigin_M1(3,k,iseg)+ActL*ActLOA_M1(3,k,iseg)],'-b');  % lines of action
+% %             plot3([ActOrigin_M1(1,k,iseg) ActCOR_M1(1,iseg)],...
+% %                   [ActOrigin_M1(2,k,iseg) ActCOR_M1(2,iseg)],...
+% %                   [ActOrigin_M1(3,k,iseg) ActCOR_M1(3,iseg)],':b');  % plot lines connecting actuator center of rotation to each of the 3 actuator centers (for ease of visualization)
+% %         end;
+%         % plot cell top chord
+%         for k=1:3
+%             kk = k+1;
+%             if kk > 3
+%                 kk=1;
+%             end;
+%             plot3([CellNode_M1(1,k,iseg); CellNode_M1(1,kk,iseg)],[CellNode_M1(2,k,iseg); CellNode_M1(2,kk,iseg)],[CellNode_M1(3,k,iseg); CellNode_M1(3,kk,iseg)],'-r');
+%             plot3([CellTopChordThirdPoints_M1(1,k,iseg); CellSideAAPCenter_M1(1,k,iseg)],...
+%                 [CellTopChordThirdPoints_M1(2,k,iseg); CellSideAAPCenter_M1(2,k,iseg)],...
+%                 [CellTopChordThirdPoints_M1(3,k,iseg); CellSideAAPCenter_M1(3,k,iseg)],'-r');
+%             plot3(CellSideAAPCenter_M1(1,k,iseg),...
+%                 CellSideAAPCenter_M1(2,k,iseg),...
+%                 CellSideAAPCenter_M1(3,k,iseg),'.r');
+%         end
+%         
+%     end;
+% end;
+% % plot M1CRS Coordinate system
+% LM1CRS=0.8*a;
+% LM1CRStxt=0.9*a;
+% plot3(0,0,0,'.k');  % center of M1CRS
+% plot3([0 LM1CRS],[0 0],[0 0],'-k');  % X axis of M1CRS
+% text(LM1CRStxt,0,0,'X','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
+% plot3([0 0],[0 LM1CRS],[0 0],'-k');  % Y axis of M1CRS
+% text(0,LM1CRStxt,0,'Y','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
+% plot3([0 0],[0 0],[0 LM1CRS],'-k');  % Z axis of M1CRS
+% text(0,0,LM1CRStxt,'Z','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
+% 
+% xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');zlabel('Z_{M1} (m)');
+% title('Segment Outlines in XYZ_{M1} (black; dashed for sectors B,D,E), PSA support frame (blue; dashed for leg // to Y_P_S_A), and cell top chord (red)');
+% saveas(h,'3D_AllSectors_Act_Interf.fig');
 
 % ----------------------------------------------------------------------------------------------------------------------------------------------------------------
-% 2D plot of array with area and circumscribed radius color code and corresponding histograms
-h=figure('Position',[80 80 scrsz(3)*2/3 scrsz(4)*2/3],'Name','Statistics: Segment Area & Radius of Circumscribed Circle','NumberTitle','off');
-subplot(221);
-  %axis([-(a+a/3) cos(30*pi/180)*RmaxBP+a/3 -a/3 RmaxBP+a/3]);
-  plot(0,0,'.k');
-  for i=1:n_segments
-      hold on;
-      fill([Vertex_M1(1,:,i) Vertex_M1(1,1,i)],[Vertex_M1(2,:,i) Vertex_M1(2,1,i)],HexagonArea(i));
-  end;
-  axis('equal');
-  xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');
-  title('Dist. of Segment Area ({m^2})');
-  colorbar('vert');
-subplot(222);
-  %axis([-(a+a/3) cos(30*pi/180)*RmaxBP+a/3 -a/3 RmaxBP+a/3]);
-  plot(0,0,'.k');
-  for i=1:n_segments
-      hold on;
-      fill([Vertex_M1(1,:,i) Vertex_M1(1,1,i)],[Vertex_M1(2,:,i) Vertex_M1(2,1,i)],CircumRadii(i));
-  end;
-  axis('equal');
-  xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');
-  title('Dist. of Radius of Circumscribed Circle (m)');
-  colorbar('vert');
-subplot(223);
-  hist(HexagonArea,15);
-  xlabel('Segment Area ({m^2})');ylabel('count');
-  title('Dist. of Segment Area ({m^2})');
-subplot(224);
-  hist(CircumRadii,15);
-  xlabel('Radius of Circumscribed Circle (m)');ylabel('count');
-  title('Dist. of Radius of Circumscribed Circle (m)');
-saveas(h,'Stats_Area_Circum.fig');
-
-% ----------------------------------------------------------------------------------------------------------------------------------------------------------------
-% 3D plot of segment outlines and PSA and Edge sensor coordinate systems - sector A
-h=figure('Position',[90 90 scrsz(3)*2/3 scrsz(4)*2/3],'Name','3D Array - Sector A - Gapped and Ungapped, with PSA and ES coordinate systems','NumberTitle','off');
-hold off;
-plot3(Center_M1(1,1:n_segments),Center_M1(2,1:n_segments),Center_M1(3,1:n_segments),'.k');
-axis([-(a/2+a/3) cos(30*pi/180)*RmaxBP+a/3 -a/3 RmaxBP+a/3]);
-axis('equal');
-% plot segment outlines
-for i=1:n_segments
-    hold on;
-    plot3([UngappedVertex_M1(1,:,i) UngappedVertex_M1(1,1,i)],[UngappedVertex_M1(2,:,i) UngappedVertex_M1(2,1,i)],[UngappedVertex_M1(3,:,i) UngappedVertex_M1(3,1,i)],':k');  % plot sector A, ungapped contours
-    plot3([Vertex_M1(1,:,i) Vertex_M1(1,1,i)],[Vertex_M1(2,:,i) Vertex_M1(2,1,i)],[Vertex_M1(3,:,i) Vertex_M1(3,1,i)],'k');  % plot sector A, gapped contours
-    plot3([VertexOpt_M1(1,:,i) VertexOpt_M1(1,1,i)],[VertexOpt_M1(2,:,i) VertexOpt_M1(2,1,i)],[VertexOpt_M1(3,:,i) VertexOpt_M1(3,1,i)],'--k');  % plot sector A, chamfered contours
-end;
-% plot PSA coordinate systems
-PSAaxis=0.3*a;
-for i=1:n_segments
-    for k=1:3  % loop on three axes of PSA coordinate system
-        plot3([Center_M1(1,i) Center_M1(1,i)+PSAaxis*RPSA_M1(1,k,i)],[Center_M1(2,i) Center_M1(2,i)+PSAaxis*RPSA_M1(2,k,i)],[Center_M1(3,i) Center_M1(3,i)+PSAaxis*RPSA_M1(3,k,i)],'b');
-    end;
-
-end;
-% plot edge sensor coordinate systems
-ESaxis=0.3*a;
-for i=1:n_segments
-%i=1;
-    for j=1:12  % loop on all edge sensors of segment 'i'
-        plot3(ESOrigin_M1(1,i,j),ESOrigin_M1(2,i,j),ESOrigin_M1(3,i,j),'.g');  % center of ES coordinate system
-        for k=1:3  % loop on three axes of ES coordinate system
-            plot3([ESOrigin_M1(1,i,j) ESOrigin_M1(1,i,j)+ESaxis*RES_M1(1,k,i,j)],[ESOrigin_M1(2,i,j) ESOrigin_M1(2,i,j)+ESaxis*RES_M1(2,k,i,j)],[ESOrigin_M1(3,i,j) ESOrigin_M1(3,i,j)+ESaxis*RES_M1(3,k,i,j)],'g');
-        end;
-    end;
-end;
-% plot M1CRS Coordinate system
-LM1CRS=0.8*a;
-LM1CRStxt=0.9*a;
-plot3(0,0,0,'.k');  % center of M1CRS
-plot3([0 LM1CRS],[0 0],[0 0],'-k');  % X axis of M1CRS
-text(LM1CRStxt,0,0,'X','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
-plot3([0 0],[0 LM1CRS],[0 0],'-k');  % Y axis of M1CRS
-text(0,LM1CRStxt,0,'Y','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
-plot3([0 0],[0 0],[0 LM1CRS],'-k');  % Z axis of M1CRS
-text(0,0,LM1CRStxt,'Z','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
-
-xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');zlabel('Z_{M1} (m)');
-title('Segment Outlines in XYZ_{M1} (black; dotted=ungapped, solid=gapped, dashed=chamfered), PSACRS (blue), and ESCRS (green)');
-saveas(h,'3D_SectorA_PSA_ES.fig');
-
-% ----------------------------------------------------------------------------------------------------------------------------------------------------------------
-% 3D plot of entire array with supports and actuators shown
-h=figure('Position',[100 100 scrsz(3)*2/3 scrsz(4)*2/3],'Name','3D Array - Complete - Gapped, with actuators & cell-PSA interface points','NumberTitle','off');
-hold off
-% plot segment centers
-plot3(Center_M1(1,:),Center_M1(2,:),Center_M1(3,:),'.k');
-axis([-1*ceil(cos(30*pi/180)*RmaxBP*1.1) ceil(cos(30*pi/180)*RmaxBP*1.1) -1*ceil(RmaxBP*1.1) ceil(RmaxBP*1.1)]);
-axis equal;
-ActL=0.4*a;  % length of line segments to represent actuators lines of action
-for j=1:6  % loop on 6 sectors
-    for i=1:n_segments
-        hold on;
-        iseg=i+(j-1)*n_segments;
-        % plot segment outlines
-        plot3([Vertex_M1(1,:,iseg) Vertex_M1(1,1,iseg)],[Vertex_M1(2,:,iseg) Vertex_M1(2,1,iseg)],[Vertex_M1(3,:,iseg) Vertex_M1(3,1,iseg)],'k');  % plot segment
-        hold on;
-        % plot SSA supports
-        CIcenter_M1=1/3*(CellInterface_M1(:,1,iseg)+CellInterface_M1(:,2,iseg)+CellInterface_M1(:,3,iseg)); % center (mean) of cell interface points (for display only)
-        for k=1:3
-            plot3(CellInterface_M1(1,k,iseg),CellInterface_M1(2,k,iseg),CellInterface_M1(3,k,iseg),'.b');
-            plot3([CIcenter_M1(1) CellInterface_M1(1,k,iseg)],[CIcenter_M1(2) CellInterface_M1(2,k,iseg)],[CIcenter_M1(3) CellInterface_M1(3,k,iseg)],':b'); % plot lines connecting each of the 3 cell interface points to the mean of those three points (for ease of visualization)
-        end;
-        % plot actuators
-        plot3(ActCOR_M1(1,iseg),ActCOR_M1(2,iseg),ActCOR_M1(3,iseg),'.r');  % center of rotation
-        for k=1:3
-            plot3(ActOrigin_M1(1,k,iseg),ActOrigin_M1(2,k,iseg),ActOrigin_M1(3,k,iseg),'.r');  % ACTCRS origin
-            plot3([ActOrigin_M1(1,k,iseg) ActOrigin_M1(1,k,iseg)+ActL*ActLOA_M1(1,k,iseg)],...
-                  [ActOrigin_M1(2,k,iseg) ActOrigin_M1(2,k,iseg)+ActL*ActLOA_M1(2,k,iseg)],...
-                  [ActOrigin_M1(3,k,iseg) ActOrigin_M1(3,k,iseg)+ActL*ActLOA_M1(3,k,iseg)],'-r');  % lines of action
-            plot3([ActOrigin_M1(1,k,iseg) ActCOR_M1(1,iseg)],...
-                  [ActOrigin_M1(2,k,iseg) ActCOR_M1(2,iseg)],...
-                  [ActOrigin_M1(3,k,iseg) ActCOR_M1(3,iseg)],':r');  % plot lines connecting actuator center of rotation to each of the 3 actuator centers (for ease of visualization)
-        end;
-    end;
-end;
-% plot M1CRS Coordinate system
-LM1CRS=0.8*a;
-LM1CRStxt=0.9*a;
-plot3(0,0,0,'.k');  % center of M1CRS
-plot3([0 LM1CRS],[0 0],[0 0],'-k');  % X axis of M1CRS
-text(LM1CRStxt,0,0,'X','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
-plot3([0 0],[0 LM1CRS],[0 0],'-k');  % Y axis of M1CRS
-text(0,LM1CRStxt,0,'Y','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
-plot3([0 0],[0 0],[0 LM1CRS],'-k');  % Z axis of M1CRS
-text(0,0,LM1CRStxt,'Z','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
-
-xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');zlabel('Z_{M1} (m)');
-title('Segment Outlines in XYZ_{M1} (black), Actuator Centers & Lines of Action (red), Actuation Center of Rotation (red), and Cell Interface Points (blue)');
-saveas(h,'3D_AllSectors_Act_Interf.fig');
-
-% ----------------------------------------------------------------------------------------------------------------------------------------------------------------
-% 2D plot of segment outlines in TEMP frame - REDUCED by substracting a regular hexagon of size a_reduced;
-h=figure('Position',[110 110 scrsz(3)*2/3 scrsz(4)*2/3],'Name','Segment Outlines in TEMP frame','NumberTitle','off');
-angles=[0:5]*pi/3;
-a_reduced=(100-50*(Rout/Opt_k)^2)/100*a;
-DVx=a_reduced*cos(angles);
-DVy=a_reduced*sin(angles);
-axis([-1 1 -1 1]*(MaxDiam/2-a_reduced)*1.1);
-axis('equal');
-for i=1:n_segments
-    hold on;
-    plot([Vertex_Temp(1,:,i)-DVx Vertex_Temp(1,1,i)-a_reduced],[Vertex_Temp(2,:,i)-DVy Vertex_Temp(2,1,i)],'-y');
-end;
-hold on; i=iMinDiam;  h1=plot([Vertex_Temp(1,:,i)-DVx Vertex_Temp(1,1,i)-a_reduced],[Vertex_Temp(2,:,i)-DVy Vertex_Temp(2,1,i)],'--g','LineWidth',2);
-hold on; i=iMaxDiam;  h2=plot([Vertex_Temp(1,:,i)-DVx Vertex_Temp(1,1,i)-a_reduced],[Vertex_Temp(2,:,i)-DVy Vertex_Temp(2,1,i)],'-g','LineWidth',2);
-hold on; i=iMinArea;  h3=plot([Vertex_Temp(1,:,i)-DVx Vertex_Temp(1,1,i)-a_reduced],[Vertex_Temp(2,:,i)-DVy Vertex_Temp(2,1,i)],'--b','LineWidth',2);
-hold on; i=iMaxArea;  h4=plot([Vertex_Temp(1,:,i)-DVx Vertex_Temp(1,1,i)-a_reduced],[Vertex_Temp(2,:,i)-DVy Vertex_Temp(2,1,i)],'-b','LineWidth',2);
-hold on; i=iMinIrreg; h5=plot([Vertex_Temp(1,:,i)-DVx Vertex_Temp(1,1,i)-a_reduced],[Vertex_Temp(2,:,i)-DVy Vertex_Temp(2,1,i)],'--r','LineWidth',2);
-hold on; i=iMaxIrreg; h6=plot([Vertex_Temp(1,:,i)-DVx Vertex_Temp(1,1,i)-a_reduced],[Vertex_Temp(2,:,i)-DVy Vertex_Temp(2,1,i)],'-r','LineWidth',2); 
-legend([h1 h2 h3 h4 h5 h6],'Min Circum. circle','Max Circum. circle','Min Area', 'Max Area','Min Irregularity','Max Irregularity');
-xlabel('X_{Temp} (m)');ylabel('Y_{Temp} (m)');
-title('Segment Outlines projected into XY_{Temp} plane (reduced)');
-saveas(h,'Outlines_Temp_top.fig');
-
-% ----------------------------------------------------------------------------------------------------------------------------------------------------------------
-% 2D plot of segment outlines in PSA frame - REDUCED by substracting a regular hexagon of size a_reduced;
-h=figure('Position',[120 120 scrsz(3)*2/3 scrsz(4)*2/3],'Name','Segment Outlines in PSA frame','NumberTitle','off');
-angles=[0:5]*pi/3;
-DVx=a_reduced*cos(angles);
-DVy=a_reduced*sin(angles);
-axis([-1 1 -1 1]*(MaxDiam/2-a_reduced)*1.1);
-axis('equal');
-for i=1:n_segments
-    hold on;
-    plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-a_reduced],[Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)],'-y');
-end;
-hold on; i=iMinDiam;  h1=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-a_reduced],[Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)],'--g','LineWidth',2);
-hold on; i=iMaxDiam;  h2=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-a_reduced],[Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)],'-g','LineWidth',2);
-hold on; i=iMinArea;  h3=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-a_reduced],[Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)],'--b','LineWidth',2);
-hold on; i=iMaxArea;  h4=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-a_reduced],[Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)],'-b','LineWidth',2);
-hold on; i=iMinIrreg; h5=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-a_reduced],[Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)],'--r','LineWidth',2);
-hold on; i=iMaxIrreg; h6=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-a_reduced],[Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)],'-r','LineWidth',2); 
-legend([h1 h2 h3 h4 h5 h6],'Min Circum. circle','Max Circum. circle','Min Area', 'Max Area','Min Irregularity','Max Irregularity');
-xlabel('X_{PSA} (m)');ylabel('Y_{PSA} (m)');
-title('Segment Outlines projected into XY_{PSA} plane (reduced)');
-saveas(h,'Outlines_PSA_top.fig');
-
-% ----------------------------------------------------------------------------------------------------------------------------------------------------------------
-% XY and XZ plots of segment outlines in PSA frame - REDUCED by substracting a
-% regular hexagon of size a_reduced;
-h=figure('Position',[130 130 scrsz(3)*2/3 scrsz(4)*2/3],'Name','Segment Profiles in PSA frame','NumberTitle','off');
-angles=[0:5]*pi/3;
-DVx=a_reduced*cos(angles);
-DVy=a_reduced*sin(angles);
-DVz=zeros(size(DVx));
-subplot(211);
-  for i=1:n_segments
-      hold on;
-      plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-DVx(1)],[Vertex_PSA(3,:,i)-DVz Vertex_PSA(3,1,i)],'-y');
-  end;
-  hold on; i=iMinDiam;  h1=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-DVx(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'--g','LineWidth',2);
-  hold on; i=iMaxDiam;  h2=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-DVx(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'-g','LineWidth',2);
-  hold on; i=iMinArea;  h3=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-DVx(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'--b','LineWidth',2);
-  hold on; i=iMaxArea;  h4=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-DVx(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'-b','LineWidth',2);
-  hold on; i=iMinIrreg; h5=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-DVx(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'--r','LineWidth',2);
-  hold on; i=iMaxIrreg; h6=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-DVx(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'-r','LineWidth',2); 
-  legend([h1 h2 h3 h4 h5 h6],'Min Circum. circle','Max Circum. circle','Min Area', 'Max Area','Min Irregularity','Max Irregularity');
-  xlabel('X_{PSA} (m)');ylabel('Z_{PSA} (m)');
-  title('Segment Outlines projected into XZ_{PSA} plane (reduced)');
-subplot(212);
-  for i=1:n_segments
-      hold on;
-      plot([Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)-DVy(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'-y');
-  end;
-  hold on; i=iMinDiam;  h1=plot([Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)-DVy(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'--g','LineWidth',2);
-  hold on; i=iMaxDiam;  h2=plot([Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)-DVy(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'-g','LineWidth',2);
-  hold on; i=iMinArea;  h3=plot([Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)-DVy(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'--b','LineWidth',2);
-  hold on; i=iMaxArea;  h4=plot([Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)-DVy(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'-b','LineWidth',2);
-  hold on; i=iMinIrreg; h5=plot([Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)-DVy(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'--r','LineWidth',2);
-  hold on; i=iMaxIrreg; h6=plot([Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)-DVy(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'-r','LineWidth',2); 
-  legend([h1 h2 h3 h4 h5 h6],'Min Circum. circle','Max Circum. circle','Min Area', 'Max Area','Min Irregularity','Max Irregularity');
-  xlabel('Y_{PSA} (m)');ylabel('Z_{PSA} (m)');
-  title('Segment Outlines projected into YZ_{PSA} plane (reduced)');
-saveas(h,'Outlines_PSA_side.fig');
+% % 3D plot of entire array with PSA and M1 Systems Shown
+% h=figure('Position',[100 100 scrsz(3)*2/3 scrsz(4)*2/3],'Name','3D Array - Complete - Gapped','NumberTitle','off');
+% hold off
+% axis([-1*ceil(cos(30*pi/180)*RmaxBP*1.1) ceil(cos(30*pi/180)*RmaxBP*1.1) -1*ceil(RmaxBP*1.1) ceil(RmaxBP*1.1)]);
+% axis equal;
+% ActL=0.4*a;  % length of line segments to represent actuators lines of action
+% for j=1:6  % loop on 6 sectors
+%     for i=1:n_segments
+%         hold on;
+%         iseg=i+(j-1)*n_segments;
+%         % plot segment outlines
+%         plot3([Vertex_M1(1,:,iseg) Vertex_M1(1,1,iseg)],[Vertex_M1(2,:,iseg) Vertex_M1(2,1,iseg)],[Vertex_M1(3,:,iseg) Vertex_M1(3,1,iseg)],'k');  % plot segment
+%         hold on;
+%         % plot PSA axes
+%         LPSACRS=0.4*a;
+%         c=Center_M1(:,iseg);
+%         x=RPSA_M1(:,1,iseg)*LPSACRS + c;
+%         y=RPSA_M1(:,2,iseg)*LPSACRS + c;
+%         z=RPSA_M1(:,3,iseg)*LPSACRS + c;
+%         plot3(c(1),c(2),c(3),'.k');  % center of PSACRS
+%         plot3([c(1) x(1)],[c(2) x(2)],[c(3) x(3)],'-k');  % X axis of PSACRS
+%         plot3([c(1) y(1)],[c(2) y(2)],[c(3) y(3)],'-k');  % Y axis of PSACRS
+%         plot3([c(1) z(1)],[c(2) z(2)],[c(3) z(3)],'-k');  % Z axis of PSACRS
+%     end;
+% end;
+% % plot M1CRS Coordinate system
+% LM1CRS=0.8*a;
+% LM1CRStxt=0.9*a;
+% plot3(0,0,0,'.k');  % center of M1CRS
+% plot3([0 LM1CRS],[0 0],[0 0],'-k');  % X axis of M1CRS
+% %text(LM1CRStxt,0,0,'X','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
+% plot3([0 0],[0 LM1CRS],[0 0],'-k');  % Y axis of M1CRS
+% %text(0,LM1CRStxt,0,'Y','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
+% plot3([0 0],[0 0],[0 LM1CRS],'-k');  % Z axis of M1CRS
+% %text(0,0,LM1CRStxt,'Z','HorizontalAlignment','Center','VerticalAlignment','Middle','Color','k');
+% 
+% xlabel('X_{M1} (m)');ylabel('Y_{M1} (m)');zlabel('Z_{M1} (m)');
+% title('Segment Outlines in XYZ_{M1} (black), Actuator Centers & Lines of Action (red), Actuation Center of Rotation (red), and Cell Interface Points (blue)');
+% saveas(h,'3D_AllSectors_Act_Interf.fig');
+% 
+% 
+% 
+% % ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+% % 2D plot of segment outlines in TEMP frame - REDUCED by substracting a regular hexagon of size a_reduced;
+% h=figure('Position',[110 110 scrsz(3)*2/3 scrsz(4)*2/3],'Name','Segment Outlines in TEMP frame','NumberTitle','off');
+% angles=[0:5]*pi/3;
+% a_reduced=(100-50*(Rout/Opt_k)^2)/100*a;
+% DVx=a_reduced*cos(angles);
+% DVy=a_reduced*sin(angles);
+% axis([-1 1 -1 1]*(MaxDiam/2-a_reduced)*1.1);
+% axis('equal');
+% for i=1:n_segments
+%     hold on;
+%     plot([Vertex_Temp(1,:,i)-DVx Vertex_Temp(1,1,i)-a_reduced],[Vertex_Temp(2,:,i)-DVy Vertex_Temp(2,1,i)],'-y');
+% end;
+% hold on; i=iMinDiam;  h1=plot([Vertex_Temp(1,:,i)-DVx Vertex_Temp(1,1,i)-a_reduced],[Vertex_Temp(2,:,i)-DVy Vertex_Temp(2,1,i)],'--g','LineWidth',2);
+% hold on; i=iMaxDiam;  h2=plot([Vertex_Temp(1,:,i)-DVx Vertex_Temp(1,1,i)-a_reduced],[Vertex_Temp(2,:,i)-DVy Vertex_Temp(2,1,i)],'-g','LineWidth',2);
+% hold on; i=iMinArea;  h3=plot([Vertex_Temp(1,:,i)-DVx Vertex_Temp(1,1,i)-a_reduced],[Vertex_Temp(2,:,i)-DVy Vertex_Temp(2,1,i)],'--b','LineWidth',2);
+% hold on; i=iMaxArea;  h4=plot([Vertex_Temp(1,:,i)-DVx Vertex_Temp(1,1,i)-a_reduced],[Vertex_Temp(2,:,i)-DVy Vertex_Temp(2,1,i)],'-b','LineWidth',2);
+% hold on; i=iMinIrreg; h5=plot([Vertex_Temp(1,:,i)-DVx Vertex_Temp(1,1,i)-a_reduced],[Vertex_Temp(2,:,i)-DVy Vertex_Temp(2,1,i)],'--r','LineWidth',2);
+% hold on; i=iMaxIrreg; h6=plot([Vertex_Temp(1,:,i)-DVx Vertex_Temp(1,1,i)-a_reduced],[Vertex_Temp(2,:,i)-DVy Vertex_Temp(2,1,i)],'-r','LineWidth',2); 
+% legend([h1 h2 h3 h4 h5 h6],'Min Circum. circle','Max Circum. circle','Min Area', 'Max Area','Min Irregularity','Max Irregularity');
+% xlabel('X_{Temp} (m)');ylabel('Y_{Temp} (m)');
+% title('Segment Outlines projected into XY_{Temp} plane (reduced)');
+% saveas(h,'Outlines_Temp_top.fig');
+% 
+% % ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+% % 2D plot of segment outlines in PSA frame - REDUCED by substracting a regular hexagon of size a_reduced;
+% h=figure('Position',[120 120 scrsz(3)*2/3 scrsz(4)*2/3],'Name','Segment Outlines in PSA frame','NumberTitle','off');
+% angles=[0:5]*pi/3;
+% DVx=a_reduced*cos(angles);
+% DVy=a_reduced*sin(angles);
+% axis([-1 1 -1 1]*(MaxDiam/2-a_reduced)*1.1);
+% axis('equal');
+% for i=1:n_segments
+%     hold on;
+%     plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-a_reduced],[Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)],'-y');
+% end;
+% hold on; i=iMinDiam;  h1=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-a_reduced],[Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)],'--g','LineWidth',2);
+% hold on; i=iMaxDiam;  h2=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-a_reduced],[Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)],'-g','LineWidth',2);
+% hold on; i=iMinArea;  h3=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-a_reduced],[Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)],'--b','LineWidth',2);
+% hold on; i=iMaxArea;  h4=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-a_reduced],[Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)],'-b','LineWidth',2);
+% hold on; i=iMinIrreg; h5=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-a_reduced],[Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)],'--r','LineWidth',2);
+% hold on; i=iMaxIrreg; h6=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-a_reduced],[Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)],'-r','LineWidth',2); 
+% legend([h1 h2 h3 h4 h5 h6],'Min Circum. circle','Max Circum. circle','Min Area', 'Max Area','Min Irregularity','Max Irregularity');
+% xlabel('X_{PSA} (m)');ylabel('Y_{PSA} (m)');
+% title('Segment Outlines projected into XY_{PSA} plane (reduced)');
+% saveas(h,'Outlines_PSA_top.fig');
+% 
+% % ----------------------------------------------------------------------------------------------------------------------------------------------------------------
+% % XY and XZ plots of segment outlines in PSA frame - REDUCED by substracting a
+% % regular hexagon of size a_reduced;
+% h=figure('Position',[130 130 scrsz(3)*2/3 scrsz(4)*2/3],'Name','Segment Profiles in PSA frame','NumberTitle','off');
+% angles=[0:5]*pi/3;
+% DVx=a_reduced*cos(angles);
+% DVy=a_reduced*sin(angles);
+% DVz=zeros(size(DVx));
+% subplot(211);
+%   for i=1:n_segments
+%       hold on;
+%       plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-DVx(1)],[Vertex_PSA(3,:,i)-DVz Vertex_PSA(3,1,i)],'-y');
+%   end;
+%   hold on; i=iMinDiam;  h1=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-DVx(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'--g','LineWidth',2);
+%   hold on; i=iMaxDiam;  h2=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-DVx(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'-g','LineWidth',2);
+%   hold on; i=iMinArea;  h3=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-DVx(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'--b','LineWidth',2);
+%   hold on; i=iMaxArea;  h4=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-DVx(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'-b','LineWidth',2);
+%   hold on; i=iMinIrreg; h5=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-DVx(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'--r','LineWidth',2);
+%   hold on; i=iMaxIrreg; h6=plot([Vertex_PSA(1,:,i)-DVx Vertex_PSA(1,1,i)-DVx(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'-r','LineWidth',2); 
+%   legend([h1 h2 h3 h4 h5 h6],'Min Circum. circle','Max Circum. circle','Min Area', 'Max Area','Min Irregularity','Max Irregularity');
+%   xlabel('X_{PSA} (m)');ylabel('Z_{PSA} (m)');
+%   title('Segment Outlines projected into XZ_{PSA} plane (reduced)');
+% subplot(212);
+%   for i=1:n_segments
+%       hold on;
+%       plot([Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)-DVy(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'-y');
+%   end;
+%   hold on; i=iMinDiam;  h1=plot([Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)-DVy(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'--g','LineWidth',2);
+%   hold on; i=iMaxDiam;  h2=plot([Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)-DVy(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'-g','LineWidth',2);
+%   hold on; i=iMinArea;  h3=plot([Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)-DVy(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'--b','LineWidth',2);
+%   hold on; i=iMaxArea;  h4=plot([Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)-DVy(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'-b','LineWidth',2);
+%   hold on; i=iMinIrreg; h5=plot([Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)-DVy(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'--r','LineWidth',2);
+%   hold on; i=iMaxIrreg; h6=plot([Vertex_PSA(2,:,i)-DVy Vertex_PSA(2,1,i)-DVy(1)],[Vertex_PSA(3,:,i) Vertex_PSA(3,1,i)],'-r','LineWidth',2); 
+%   legend([h1 h2 h3 h4 h5 h6],'Min Circum. circle','Max Circum. circle','Min Area', 'Max Area','Min Irregularity','Max Irregularity');
+%   xlabel('Y_{PSA} (m)');ylabel('Z_{PSA} (m)');
+%   title('Segment Outlines projected into YZ_{PSA} plane (reduced)');
+% saveas(h,'Outlines_PSA_side.fig');
 
 dt=cputime-tstart;
 disp(['T=' num2str(dt) '  Execution completed']);
