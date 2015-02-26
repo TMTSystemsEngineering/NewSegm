@@ -25,4 +25,4 @@ RH_clocking=x(2);
 % calculate RMS irregularity
 Irregularity=resnorm/sqrt(6);  % this is an RMS vertex position error
 
-Return
+return
