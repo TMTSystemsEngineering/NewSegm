@@ -103,6 +103,7 @@ function [] = NewSegm(GeneratePlots,debugParameters);
 %
 % Modified: Brian Sutin, 2016-01-27
 %     Replaced Eric Ponslet's name with the TMT document number
+%     Fixed 11C last column to correctly print Noll, not B&W Zernike's
 %
 %######################################## set master parameters ########################################
 tstart=cputime;
@@ -1471,7 +1472,7 @@ end;
 fprintf(fid,'11C: NOLL ZERNIKE COEFFICIENTS (microns)\n');
 fprintf(fid,'type#\t   radius (m)\t  t (degrees)\t          C20\t          C22\t          C31\t          C33\t          C40\t          C42\t  \n');
 for i=1:n_segments    
-    fprintf(fid,'%3i\t%13.9f\t%13.9f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\n',i,prescriptionRadius(i), 180*(ToCenterAngle(i)+pi)/pi, 1e6*NollZernike(i).c20, 1e6*NollZernike(i).c22, 1e6*NollZernike(i).c31, 1e6*NollZernike(i).c33, 1e6*NollZernike(i).c40, 1e6*BWZernike(i).c42);
+    fprintf(fid,'%3i\t%13.9f\t%13.9f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\n',i,prescriptionRadius(i), 180*(ToCenterAngle(i)+pi)/pi, 1e6*NollZernike(i).c20, 1e6*NollZernike(i).c22, 1e6*NollZernike(i).c31, 1e6*NollZernike(i).c33, 1e6*NollZernike(i).c40, 1e6*NollZernike(i).c42);
 end;
 fprintf(fid,'11D: BORN & WOLF ZERNIKE COEFFICIENTS ROTATED INTO THE PSACRS AXES (microns)\n');
 fprintf(fid,'type#\t   radius (m)\t          C20\t         C2+2\t         c2-2\t         C3+1\t         C3-1\t         C3+3\t         C3-3\t         C40\t         C4+2\t         C4-2\t \n');
