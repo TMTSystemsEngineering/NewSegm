@@ -104,6 +104,7 @@ function [] = NewSegm(GeneratePlots,debugParameters);
 % Modified: Brian Sutin, 2016-01-27
 %     Replaced Eric Ponslet's name with the TMT document number
 %     Fixed 11C last column to correctly print Noll, not B&W Zernike's
+%     Fixed 1E showing radii for range of M1 vertices, rather than diameter
 %
 %######################################## set master parameters ########################################
 tstart=cputime;
@@ -1115,11 +1116,11 @@ fprintf(fid,'     Mean BFRH diameter = %9.6f m \n',2*mean(Radius));
 fprintf(fid,'     Max BFRH diameter = %9.6f m, or %7.2f mm larger than nominal\n',2*max(Radius),2*1000*(max(Radius)-NominalRadius));
 fprintf(fid,'1E: SEGMENTATION STATISTICS \n');
 fprintf(fid,'   M1 Inner Diameters\n');
-fprintf(fid,'     Gapped segments (glass): min diameter = %9.5f m\n',RminG);
-fprintf(fid,'             Optical surface: min diameter = %9.5f m\n',RminOpt);
+fprintf(fid,'     Gapped segments (glass): min diameter = %9.5f m\n',2*RminG);
+fprintf(fid,'             Optical surface: min diameter = %9.5f m\n',2*RminOpt);
 fprintf(fid,'   M1 Outer Diameters\n');
-fprintf(fid,'     Gapped segments (glass): max diameter = %9.5f m\n',RmaxG);
-fprintf(fid,'             Optical surface: max diameter = %9.5f m\n',RmaxOpt);
+fprintf(fid,'     Gapped segments (glass): max diameter = %9.5f m\n',2*RmaxG);
+fprintf(fid,'             Optical surface: max diameter = %9.5f m\n',2*RmaxOpt);
 fprintf(fid,'   Segment Irregularity (RMS): min = %9.3f mmRMS, at segment # %2i\n',1000*MinIrreg,iMinIrreg);
 fprintf(fid,'                               max = %9.3f mmRMS, at segment # %2i\n',1000*MaxIrreg,iMaxIrreg);
 fprintf(fid,'   Segment area: min = %9.4f m^2, at segment # %2i\n',MinArea,iMinArea);
