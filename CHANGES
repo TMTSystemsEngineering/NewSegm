@@ -1,0 +1,27 @@
+REVISION HISTORY
+
+TMT.OPT.TEC.07.044.CCR15
+  Changed "Eric Ponslet" in output header to release number "TMT.OPT.TEC.07.044.CCR15"
+
+TMT.OPT.TEC.07.044.CCR14
+  Changed REL14 to CCR14: TMT.OPT.TEC.07.044.CCR14 (B. Sutin, 20151016 - Changes made to compiled TXT file, ref. CR192; Compiled file generated from REL13; Initial CCR release)
+  A vendor has found potential errors with the Zernike coefficients, so section 11 has been temporarily removed until corrections
+  are made.  Section 12 has been retained, but should be used with caution.
+
+TMT.OPT.TEC.07.044.REL13
+  This version has a second set of S1 Prob-Points corresponding to DATUM-A Targets at R=670 contained in Section 10C. These are in 
+  addition to the Probe Points in Section 10B which are opposite the countersinks on S2.  This version also has the Segment prescriptions
+  defined in the PSA coordinate systems in Section 11D.
+
+TMT.OPT.TEC.07.044.REL12
+  This version has updated coordinates for the Subcell Alignment Targets that are consistent with the M1S-STR ICD specification of the 
+  Metrology Fixture SMR target locations. These coordinates are shown in Section 10 of this document.
+
+TMT.OPT.TEC.07.044.REL11
+  This version includes a correction for the edge sensor pocket coordinate system values.  
+  This version also includes Section 12: a summary of the segment clocking angles (angle between M1CRS_R to PSACRS_X)
+
+TMT.OPT.TEC.07.044.REL10
+  This version has corrected definitions of the mirror cell nodes in Section 8.  As a result, the AAP locaitons in Section-7 have been updated,
+  and also the radius of the fixed frame holes (AAP interfaces) in Section 1-G has also changed.
+
