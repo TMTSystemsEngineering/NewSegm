@@ -4,6 +4,7 @@ TMT.OPT.TEC.07.044.CCR15
   Changed "Eric Ponslet" in output header to release number "TMT.OPT.TEC.07.044.CCR15"
   Fixed typo causing last column of 11C to print B&W rather than Noll Zernike's
   Fixed 1E showing radii for range of M1 vertices, rather than stated diameter
+  Added note clarifying section 11 coordinate system
 
 TMT.OPT.TEC.07.044.CCR14
   Changed REL14 to CCR14: TMT.OPT.TEC.07.044.CCR14 (B. Sutin, 20151016 - Changes made to compiled TXT file, ref. CR192; Compiled file generated from REL13; Initial CCR release)
