@@ -106,6 +106,7 @@ function [] = NewSegm(GeneratePlots,debugParameters);
 %     Fixed 11C last column to correctly print Noll, not B&W Zernike's
 %     Fixed 1E showing radii for range of M1 vertices, rather than diameter
 %     Added note clarifying section 11 coordinate system
+%     Added note to section 4 calling out the plane defining the hex sides
 %
 %######################################## set master parameters ########################################
 tstart=cputime;
@@ -1203,6 +1204,8 @@ end;
 fprintf(fid,' \n');
 fprintf(fid,'--------------------------------------------  SECTION 4: GAPPED SEGMENT VERTEX COORDINATES --------------------------------------------------\n');
 fprintf(fid,'   Gapped segment vertex coordinates (before chamfering) expressed in PSA system (3A1 and 3A2) and in M1 coordinate system (3B1 and 3B2)\n');
+fprintf(fid,'   Sides of the hexed segment are defined by the plane passing through two vertex points and parallel to the PSACRS z-axis.\n');
+fprintf(fid,'   This same plane (modulo the chamfer) therefore defines the edge of the segment aperture.\n');
 fprintf(fid,'\n');
 fprintf(fid,'4A1: SEGMENT VERTEX COORDINATES EXPRESSED IN PSA COORDINATE SYSTEMS - VERTICES 1 THROUGH 3 (meters)\n');
 fprintf(fid,'type#\t  X_PSA(vtx1)\t  Y_PSA(vtx1)\t  Z_PSA(vtx1)\t  X_PSA(vtx2)\t  Y_PSA(vtx2)\t  Z_PSA(vtx2)\t  X_PSA(vtx3)\t  Y_PSA(vtx3)\t  Z_PSA(vtx3)\n');
