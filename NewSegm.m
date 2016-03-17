@@ -108,6 +108,9 @@ function [] = NewSegm(GeneratePlots,debugParameters);
 %     Added note clarifying section 11 coordinate system
 %     Added note to section 4 calling out the plane defining the hex sides
 %
+% Modified: Brian Sutin, 2016-03-17
+%     Clarified documentation on the 't' rotation in sectiona 11A and 12.
+%
 %######################################## set master parameters ########################################
 tstart=cputime;
 dt=cputime-tstart;
@@ -1461,7 +1464,7 @@ fprintf(fid,' \n');
 fprintf(fid,'-----------------------------------------------  SECTION 11: OFF-AXIS PRESCRIPTIONS -------------------------------------------------------\n');
 fprintf(fid,'NOTES: * all coefficients are listed in MICRONS\n');
 fprintf(fid,'       * all coefficients are calculated based on a nominal segment radius as listed below (in meters)\n');
-fprintf(fid,'       * The angle t (in degrees) is the angle measured in the plane XY_PSA from the X_PSA axis to the projection into XY_PSA of the R_M1 line from O_M1 to the projection of O_PSA in the XY_M1 plane; this makes t the rotation from SCRS(k) to PSACRS(k).\n');
+fprintf(fid,'       * The angle t (in degrees) is the angle measured in the plane XY_PSA from the X_PSA axis to the projection into XY_PSA of the R_M1 line from O_M1 to the projection of O_PSA in the XY_M1 plane; this makes -t the rotation from SCRS(k) to PSACRS(k).\n');
 fprintf(fid,'       * Zernike coefficients are based on the 7 monomial coefficients listed below (i.e. a20, a22, a31, a33, a40, a42, and a44); all other monomial coefficients are assumed equal to zero\n');
 fprintf(fid,'       * Zernike coefficients are identified using the n,m notation, i.e. C20=focus, C22=astigmatism, C31=coma, C33=trefoil, C40=spherical aberration, C42=higher order astigmatism\n');
 fprintf(fid,'11A: CYLINDRICAL MONOMIAL COEFFICIENTS (microns)\n');
@@ -1489,6 +1492,7 @@ fprintf(fid,' \n');
 
 fprintf(fid,'-------------------------------------------  SECTION 12: SEGMENT CLOCKING RELATIVE TO M1 --------------------------------------------------\n');
 fprintf(fid,'This section lists - for each segment type - the angle, measured about PSACRS_Z (or, in the PSACRS_XY plane), from the intersection between planes PSACRS_XY and M1CRS_RZ to PSACRS_X\n');
+fprintf(fid,'This "t" is the same as the "t" is section 11A, second column, but with the opposite sign.\n');
 fprintf(fid,'12A: CLOCKING OF SEGMENTS RELATIVE TO M1 RADIAL\n');
 fprintf(fid,'type#\t  t (degrees)\n');
 for i=1:n_segments    
