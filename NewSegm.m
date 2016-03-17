@@ -109,7 +109,8 @@ function [] = NewSegm(GeneratePlots,debugParameters);
 %     Added note to section 4 calling out the plane defining the hex sides
 %
 % Modified: Brian Sutin, 2016-03-17
-%     Clarified documentation on the 't' rotation in sectiona 11A and 12.
+%     Clarified documentation on the 't' rotation in sectiona 11A and 12
+%     Added extra three decimal places to last four columns of sections 11A-D
 %
 %######################################## set master parameters ########################################
 tstart=cputime;
@@ -1470,22 +1471,22 @@ fprintf(fid,'       * Zernike coefficients are identified using the n,m notation
 fprintf(fid,'11A: CYLINDRICAL MONOMIAL COEFFICIENTS (microns)\n');
 fprintf(fid,'type#\t   radius (m)\t  t (degrees)\t          a20\t          a22\t          a31\t          a33\t          a40\t          a42\t          a44\t  \n');
 for i=1:n_segments    
-    fprintf(fid,'%3i\t%13.9f\t%13.9f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\n',i,prescriptionRadius(i), 180*(ToCenterAngle(i)+pi)/pi, 1e6*monomials(i).a20, 1e6*monomials(i).a22, 1e6*monomials(i).a31, 1e6*monomials(i).a33, 1e6*monomials(i).a40, 1e6*monomials(i).a42, 1e6*monomials(i).a44);
+    fprintf(fid,'%3i\t%13.9f\t%13.9f\t%13.6f\t%13.6f\t%13.6f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\n',i,prescriptionRadius(i), 180*(ToCenterAngle(i)+pi)/pi, 1e6*monomials(i).a20, 1e6*monomials(i).a22, 1e6*monomials(i).a31, 1e6*monomials(i).a33, 1e6*monomials(i).a40, 1e6*monomials(i).a42, 1e6*monomials(i).a44);
 end;
 fprintf(fid,'11B: BORN & WOLF ZERNIKE COEFFICIENTS (microns)\n');
 fprintf(fid,'type#\t   radius (m)\t  t (degrees)\t          C20\t          C22\t          C31\t          C33\t          C40\t          C42\t  \n');
 for i=1:n_segments    
-    fprintf(fid,'%3i\t%13.9f\t%13.9f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\n',i,prescriptionRadius(i), 180*(ToCenterAngle(i)+pi)/pi, 1e6*BWZernike(i).c20, 1e6*BWZernike(i).c22, 1e6*BWZernike(i).c31, 1e6*BWZernike(i).c33, 1e6*BWZernike(i).c40, 1e6*BWZernike(i).c42);
+    fprintf(fid,'%3i\t%13.9f\t%13.9f\t%13.6f\t%13.6f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\n',i,prescriptionRadius(i), 180*(ToCenterAngle(i)+pi)/pi, 1e6*BWZernike(i).c20, 1e6*BWZernike(i).c22, 1e6*BWZernike(i).c31, 1e6*BWZernike(i).c33, 1e6*BWZernike(i).c40, 1e6*BWZernike(i).c42);
 end;
 fprintf(fid,'11C: NOLL ZERNIKE COEFFICIENTS (microns)\n');
 fprintf(fid,'type#\t   radius (m)\t  t (degrees)\t          C20\t          C22\t          C31\t          C33\t          C40\t          C42\t  \n');
 for i=1:n_segments    
-    fprintf(fid,'%3i\t%13.9f\t%13.9f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\n',i,prescriptionRadius(i), 180*(ToCenterAngle(i)+pi)/pi, 1e6*NollZernike(i).c20, 1e6*NollZernike(i).c22, 1e6*NollZernike(i).c31, 1e6*NollZernike(i).c33, 1e6*NollZernike(i).c40, 1e6*NollZernike(i).c42);
+    fprintf(fid,'%3i\t%13.9f\t%13.9f\t%13.6f\t%13.6f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\n',i,prescriptionRadius(i), 180*(ToCenterAngle(i)+pi)/pi, 1e6*NollZernike(i).c20, 1e6*NollZernike(i).c22, 1e6*NollZernike(i).c31, 1e6*NollZernike(i).c33, 1e6*NollZernike(i).c40, 1e6*NollZernike(i).c42);
 end;
 fprintf(fid,'11D: BORN & WOLF ZERNIKE COEFFICIENTS ROTATED INTO THE PSACRS AXES (microns)\n');
 fprintf(fid,'type#\t   radius (m)\t          C20\t         C2+2\t         c2-2\t         C3+1\t         C3-1\t         C3+3\t         C3-3\t         C40\t         C4+2\t         C4-2\t \n');
 for i=1:n_segments    
-    fprintf(fid,'%3i\t%13.9f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\n',i,prescriptionRadius(i), 1e6*PSABWZernike(i).c20, 1e6*PSABWZernike(i).c22, 1e6*PSABWZernike(i).c2m2, 1e6*PSABWZernike(i).c31, 1e6*PSABWZernike(i).c3m1, 1e6*PSABWZernike(i).c33, 1e6*PSABWZernike(i).c3m3, 1e6*PSABWZernike(i).c40, 1e6*PSABWZernike(i).c42, 1e6*PSABWZernike(i).c4m2);
+    fprintf(fid,'%3i\t%13.9f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.6f\t%13.9f\t%13.9f\t%13.9f\t%13.9f\n',i,prescriptionRadius(i), 1e6*PSABWZernike(i).c20, 1e6*PSABWZernike(i).c22, 1e6*PSABWZernike(i).c2m2, 1e6*PSABWZernike(i).c31, 1e6*PSABWZernike(i).c3m1, 1e6*PSABWZernike(i).c33, 1e6*PSABWZernike(i).c3m3, 1e6*PSABWZernike(i).c40, 1e6*PSABWZernike(i).c42, 1e6*PSABWZernike(i).c4m2);
 end;
 fprintf(fid,' \n');
     
