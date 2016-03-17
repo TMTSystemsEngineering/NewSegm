@@ -1492,7 +1492,7 @@ fprintf(fid,' \n');
 
 fprintf(fid,'-------------------------------------------  SECTION 12: SEGMENT CLOCKING RELATIVE TO M1 --------------------------------------------------\n');
 fprintf(fid,'This section lists - for each segment type - the angle, measured about PSACRS_Z (or, in the PSACRS_XY plane), from the intersection between planes PSACRS_XY and M1CRS_RZ to PSACRS_X\n');
-fprintf(fid,'This "t" is the same as the "t" is section 11A, second column, but with the opposite sign.\n');
+fprintf(fid,'This "t" is the same as the "t" is section 11A, third column, but with the opposite sign.\n');
 fprintf(fid,'12A: CLOCKING OF SEGMENTS RELATIVE TO M1 RADIAL\n');
 fprintf(fid,'type#\t  t (degrees)\n');
 for i=1:n_segments    
