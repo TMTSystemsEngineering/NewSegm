@@ -6,6 +6,9 @@ TMT.OPT.TEC.07.044.CCR15
   Fixed 1E showing radii for range of M1 vertices, rather than stated diameter.
   Added note clarifying section 11 coordinate systems; t is a rotation from SCRS.
   Added note to section 4 calling out the plane defining the hex sides; this plane is called out nowhere else.
+  Clarified documentation on the 't' rotation in sectiona 11A and 12.
+  Added extra three decimal places to last four columns of sections 11A-D.
+  Corrected incorrect rotation direction for 11D.
 
 TMT.OPT.TEC.07.044.CCR14
   Changed REL14 to CCR14: TMT.OPT.TEC.07.044.CCR14 (B. Sutin, 20151016 - Changes made to compiled TXT file, ref. CR192; Compiled file generated from REL13; Initial CCR release)
