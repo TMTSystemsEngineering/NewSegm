@@ -116,6 +116,9 @@ function [] = NewSegm(GeneratePlots,debugParameters);
 % Updated: Byoung-Joon Seo (JPL), 2019-09-06
 %     Add 11E. NOLL ZERNIKE COEFFICIENTS ROTATED INTO THE PSACRS AXES
 %
+% Updated: Josh Church (TIO), 2021-02-08
+%     CR373, Revised comments in sections 2B, 7, 11; Added sections 13 and 14
+%
 %######################################## set master parameters ########################################
 tstart=cputime;
 dt=cputime-tstart;
@@ -1208,6 +1211,8 @@ for j=1:6 % loop on sector number
 end;
 fprintf(fid,' \n');
 fprintf(fid,'2B: ORIENTATIONS (UNIT VECTORS) OF PSA COORDINATE SYSTEMS\n'); 
+fprintf(fid,'  Guide:  The X axis Unit Vector of the PSACRS has components [ 1  0  0 ] in the PSACRS; \n'); 
+fprintf(fid,'   and [ X_M1(1xPSA)   Y_M1(1xPSA)   Z_M1(1xPSA) ] displacement in the M1CRS from the PSACRS origin specified in Section 2A.\n'); 
 fprintf(fid,'seg#\t  X_M1(1xPSA)\t  Y_M1(1xPSA)\t  Z_M1(1xPSA)\t  X_M1(1yPSA)\t  Y_M1(1yPSA)\t  Z_M1(1yPSA)\t  X_M1(1zPSA)\t  Y_M1(1zPSA)\t  Z_M1(1zPSA)\n');
 for j=1:6 % loop on sector number
     for i=1:n_segments
@@ -1335,7 +1340,7 @@ fprintf(fid,' \n');
 
 fprintf(fid,'----------------------------------------  SECTION 7: CELL-SIDE AAP FLANGE CENTER INTERFACE NODES -------------------------------------------\n');
 fprintf(fid,'Location of Cell-Side Cell to PSA interface nodes, expressed in the M1 Coordinate System\n'); 
-fprintf(fid,'These points are the theoretical geometric centers of the AAP post mounting flanges which are part of the top chord trusses.\n');
+fprintf(fid,'These points are the theoretical geometric centers of the AAP post mounting flanges which are on the underside of the top chord trusses.\n');
 fprintf(fid,'Notes: - top chord truss plates are now assumed to be nominally parallel to Z_PSA for each segment\n');
 fprintf(fid,'       - centerline of top chord members assumed to nominally span exactly between cell top chord nodes (whose coordinates are listed in the next section)\n');
 fprintf(fid,'Distance from centerline of top chord member to AAP face = %9.6f m\n',abs(dZTopChordToAAPFace));
@@ -1493,7 +1498,7 @@ fprintf(fid,' \n');
 fprintf(fid,'-----------------------------------------------  SECTION 11: OFF-AXIS PRESCRIPTIONS -------------------------------------------------------\n');
 fprintf(fid,'NOTES: * all coefficients are listed in MICRONS\n');
 fprintf(fid,'       * all coefficients are calculated based on a nominal segment radius as listed below (in meters)\n');
-fprintf(fid,'       * The angle t (in degrees) is the angle measured in the plane XY_PSA from the X_PSA axis to the projection into XY_PSA of the R_M1 line from O_M1 to the projection of O_PSA in the XY_M1 plane; this makes t the rotation from SCRS(k) to PSACRS(k).\n');
+fprintf(fid,'       * The angle t (in degrees) is the angle measured in the plane XY_PSA from the X_PSA axis to the projection into XY_PSA of the R_M1 line from O_M1 to the projection of O_PSA in the XY_M1 plane; this makes t the rotation from PSACRS(k) to SCRS(k).\n');
 fprintf(fid,'       * Zernike coefficients are based on the 7 monomial coefficients listed below (i.e. a20, a22, a31, a33, a40, a42, and a44); all other monomial coefficients are assumed equal to zero\n');
 fprintf(fid,'       * Zernike coefficients are identified using the n,m notation, i.e. C20=focus, C22=astigmatism, C31=coma, C33=trefoil, C40=spherical aberration, C42=higher order astigmatism\n');
 fprintf(fid,'11A: CYLINDRICAL MONOMIAL COEFFICIENTS (microns)\n');
@@ -1536,6 +1541,77 @@ end;
 
 
 fprintf(fid,' \n');
+
+
+
+
+fprintf(fid,'-------------------------------------------  SECTION 13: Identification Numbers of M1CS Sensor Pairs --------------------------------------------------\n');
+
+
+
+
+fprintf(fid,'13A: LISTING AND IDENTIFICATION OF M1CS SENSOR PAIRS\n');
+fprintf(fid,'M1CS sensor numbering, starts at 1 ES1 on segment 1, and proceeds linearly through all “sense” side blocks, skipping those without mates.\n');
+fprintf(fid,'Note: ES1, ES3, ES5, ES7, ES9, ES11 are "sense" side, and ES2, ES4, ES6, ES8, ES10, ES12 are "drive" side.\n');
+fprintf(fid,'Note: ES#=Global Sensor Number(1...5904)    esn=local sensor number(1...12)  \n');
+fprintf(fid,'  \n');
+fprintf(fid,'     \t-------Sense Side----------\t\t --------- Drive Side----------\n');
+fprintf(fid,'%5s\t %5s\t %5s\t %4s\t %3s\t\t %5s\t %5s  %4s\t %3s\n', '', '', 'Seg', 'Seg', '', '', 'Seg', 'Seg', ''); 
+fprintf(fid,'%5s\t %5s\t %5s\t %4s\t %3s\t\t %5s\t %5s  %4s\t %3s\n', 'Pair#', 'ES#', 'Num', 'Name', 'esn', 'ES#', 'Num', 'Name', 'esn'); 
+p=0;
+for j=1:6 % loop on sector
+    for i=1:n_segments  % loop on segments
+        for k=1:12  % loop on edge sensors
+            iES=k+12*(i-1)+n_segments*12*(j-1);  % iES is the global sensor number (1...5904)
+            iseg=i+n_segments*(j-1);    %iseg = global segment number (1...492)
+            iMateSensor=ESmate(iseg,k,2); %iES is the "current sensor" being considered;  iMateSensor is local sensor number (1...12) of the mating sensor
+            
+            %Note: Odd sensors are "sense side"; even sensors are "drive side". 
+            
+            if mod(iES,2)==1 && iMateSensor~=0   %If iES is odd and its mate is nonzero, a new ES pair has been detected.
+                p=p+1; %increment the counter for new detected ES pairs
+                iMateSector=fix((ESmate(iseg,k,1)-1)/n_segments)+1;  % number of mating sector (1...6)
+                iMateSegment=mod(ESmate(iseg,k,1)-1,n_segments)+1;  % within-sector number of mating segment (1...82)
+                iMateES=iMateSensor+12*(iMateSegment-1)+12*n_segments*(iMateSector-1);  %global sensor number of mating sensor (1...5904)
+                
+                %The ESPairs array contains all the data that will be
+                %printed on each line for an ES Pair
+                %(see header fprintf commands for legend)
+                
+                ESpairs(p,:) = [p, iES, (j-1)*82+i, SectorID(j), i, k, iMateES, (iMateSector-1)*82+iMateSegment, SectorID(iMateSector), iMateSegment, iMateSensor];
+                fprintf(fid,'%5i\t %5i\t %5i\t %2c%-2i\t %3i\t\t %5i\t %5i\t %2c%-2i\t %3i\n', ESpairs(p,:)); %output this line (data for current ES Pair) to text file 
+            end;          
+        end;
+    end;
+end;
+fprintf(fid,' \n');
+
+
+
+fprintf(fid,' \n');
+fprintf(fid,' \n');
+
+fprintf(fid,'-------------------------------------------  SECTION 14: Sequential List of M1CS Segment Actuators --------------------------------------------------\n');
+
+fprintf(fid,'14A: SEQUENTIAL LIST OF M1CS SEGMENT ACTUATORS\n');
+fprintf(fid,'Note: ACT#=Global Actuator Number(1...1476)    act#=local actuator number(1...3)  \n');
+fprintf(fid,'ACT#   segnum   segname   act#\n');
+p=0;
+for j=1:6 % loop on sector
+    for i=1:n_segments  % loop on segments
+        for k=1:3  % loop on the LOCAL actuator number (1...3)
+            iseg=i+n_segments*(j-1);  %iseg = global segment number (1...492)
+            segname = SectorID(j) + i;  %segname is a string consisting of the sector letter and the within-segment number, i.e.  A27
+            p=p+1; %increment the counter for Actuator Number (1...1476)
+            fprintf(fid,'%5i\t %5i\t %c%-2i\t %5i\n', p, iseg, SectorID(j), i, k);    %see above fprintf command for legend
+         
+        end;
+    end;
+end;
+fprintf(fid,' \n');
+
+
+
 
 
 fclose(fid);
